@@ -41,17 +41,17 @@ Custosa is a transparent WebSocket proxy that intercepts all traffic to Moltbot 
 
 ## Installation
 
-### DMG (macOS)
+### ZIP (macOS)
 
-1. Download `Custosa.dmg`
-2. Drag `Custosa.app` into `/Applications`
+1. Download `CustosaXopenclaw.zip`
+2. Unzip and drag `Custosa.app` into `/Applications`
 3. Open `Custosa.app` once to run the installer (only Telegram tokens are manual)
 
 ### Homebrew (macOS, cask)
 
 ```bash
 brew tap custosa/tap
-brew install --cask custosa
+brew install --cask --no-quarantine custosa
 open -a Custosa
 ```
 
@@ -92,6 +92,7 @@ The installer will:
 | `custosa stop` | Stop background service |
 | `custosa logs` | View security logs |
 | `custosa logs -f` | Follow log output |
+| `custosa dashboard` | Open protected OpenClaw dashboard |
 | `custosa test` | Test detection engine |
 | `custosa uninstall` | Remove Custosa |
 

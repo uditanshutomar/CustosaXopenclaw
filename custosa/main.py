@@ -6,6 +6,7 @@ Commands:
     custosa install     - Run installation wizard
     custosa serve       - Start the proxy server
     custosa status      - Show proxy status
+    custosa dashboard   - Open protected OpenClaw dashboard
     custosa stop        - Stop the proxy service
     custosa logs        - View recent logs
     custosa uninstall   - Remove Custosa and restore Moltbot config
@@ -18,6 +19,8 @@ import sys
 import json
 import signal
 import os
+import webbrowser
+from urllib.parse import quote
 from pathlib import Path
 
 # Allow running as a script or PyInstaller entrypoint.
@@ -217,6 +220,52 @@ def cmd_status(args):
             print("✅ Service: running (systemd)")
         else:
             print("⚠️  Service: not running")
+
+
+def _read_gateway_token() -> Optional[str]:
+    candidates = [
+        Path.home() / ".openclaw" / "moltbot.json",
+        Path.home() / ".clawdbot" / "moltbot.json",
+        Path.home() / ".clawdbot" / "clawdbot.json",
+    ]
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text())
+        except Exception:
+            continue
+        gateway = data.get("gateway", {})
+        if isinstance(gateway, dict):
+            auth = gateway.get("auth", {})
+            if isinstance(auth, dict):
+                token = auth.get("token")
+                if token:
+                    return str(token)
+            token = gateway.get("token")
+            if token:
+                return str(token)
+    return None
+
+
+def cmd_dashboard(args):
+    """Open the protected OpenClaw dashboard via Custosa."""
+    setup_logging(verbose=False, log_file=False)
+    token = _read_gateway_token()
+    if not token:
+        print("❌ OpenClaw gateway token not found.")
+        print("Run: openclaw dashboard, then copy the token and open via Custosa.")
+        sys.exit(1)
+    listen_port = 18789
+    if CUSTOSA_CONFIG.exists():
+        try:
+            cfg = CustosaConfig.load()
+            listen_port = cfg.listen_port
+        except Exception:
+            pass
+    url = f"http://127.0.0.1:{listen_port}/?token={quote(token)}"
+    print(f"Opening protected dashboard: {url}")
+    webbrowser.open(url)
     
     # Check Moltbot configuration
     detector = MoltbotDetector()
@@ -394,6 +443,10 @@ def main():
     # status
     status_parser = subparsers.add_parser("status", help="Show proxy status")
     status_parser.set_defaults(func=cmd_status)
+
+    # dashboard
+    dashboard_parser = subparsers.add_parser("dashboard", help="Open protected OpenClaw dashboard")
+    dashboard_parser.set_defaults(func=cmd_dashboard)
     
     # start
     start_parser = subparsers.add_parser("start", help="Start the proxy service")

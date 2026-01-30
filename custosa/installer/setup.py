@@ -17,6 +17,8 @@ import sys
 import json
 import logging
 import subprocess
+import webbrowser
+from urllib.parse import quote
 import shutil
 from pathlib import Path
 from dataclasses import dataclass, asdict
@@ -551,6 +553,42 @@ def _start_openclaw_gateway() -> bool:
     return ok
 
 
+def _read_gateway_token() -> Optional[str]:
+    candidates = [OPENCLAW_CONFIG, MOLTBOT_CONFIG, CLAWDBOT_CONFIG]
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text())
+        except Exception:
+            continue
+        gateway = data.get("gateway", {})
+        if isinstance(gateway, dict):
+            auth = gateway.get("auth", {})
+            if isinstance(auth, dict):
+                token = auth.get("token")
+                if token:
+                    return str(token)
+            token = gateway.get("token")
+            if token:
+                return str(token)
+    return None
+
+
+def _open_protected_dashboard(listen_port: int) -> bool:
+    token = _read_gateway_token()
+    if not token:
+        logger.warning("OpenClaw gateway token not found; skipping dashboard auto-open.")
+        return False
+    url = f"http://127.0.0.1:{listen_port}/?token={quote(token)}"
+    try:
+        webbrowser.open(url)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to open dashboard: %s", exc)
+        return False
+
+
 class ServiceManager:
     """
     Manages Custosa as a background service.
@@ -821,6 +859,9 @@ def run_installer():
     print("  /status           - Check Custosa status")
     print("  /pending          - List pending requests")
     print()
+
+    # Auto-open protected dashboard (best effort)
+    _open_protected_dashboard(config.listen_port)
     
     return True
 
