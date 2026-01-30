@@ -86,17 +86,19 @@ def _fetch_latest_release() -> Optional[dict]:
         return None
 
 
-def _find_dmg_asset(release: dict) -> Optional[UpdateInfo]:
+def _find_update_asset(release: dict) -> Optional[UpdateInfo]:
     assets = release.get("assets", [])
-    for asset in assets:
-        name = asset.get("name", "")
-        if name.lower().endswith(".dmg"):
-            return UpdateInfo(
-                version=release.get("tag_name", ""),
-                url=asset.get("browser_download_url", ""),
-                asset_name=name,
-                size=int(asset.get("size", 0)),
-            )
+    preferred_exts = (".zip",)
+    for ext in preferred_exts:
+        for asset in assets:
+            name = asset.get("name", "")
+            if name.lower().endswith(ext):
+                return UpdateInfo(
+                    version=release.get("tag_name", ""),
+                    url=asset.get("browser_download_url", ""),
+                    asset_name=name,
+                    size=int(asset.get("size", 0)),
+                )
     return None
 
 
@@ -115,7 +117,7 @@ def check_for_update(force: bool) -> Optional[UpdateInfo]:
         _save_state(state)
         return None
 
-    update = _find_dmg_asset(release)
+    update = _find_update_asset(release)
     if not update:
         _save_state(state)
         return None

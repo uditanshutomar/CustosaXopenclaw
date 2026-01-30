@@ -20,8 +20,10 @@ import json
 import signal
 import os
 import webbrowser
+import subprocess
 from urllib.parse import quote
 from pathlib import Path
+from typing import Optional
 
 # Allow running as a script or PyInstaller entrypoint.
 if __package__ in (None, ""):
@@ -248,6 +250,22 @@ def _read_gateway_token() -> Optional[str]:
     return None
 
 
+def _open_url(url: str) -> bool:
+    try:
+        if sys.platform == "darwin":
+            result = subprocess.run(["/usr/bin/open", url], check=False)
+            return result.returncode == 0
+        if sys.platform.startswith("linux"):
+            result = subprocess.run(["xdg-open", url], check=False)
+            return result.returncode == 0
+    except Exception:
+        pass
+    try:
+        return bool(webbrowser.open(url))
+    except Exception:
+        return False
+
+
 def cmd_dashboard(args):
     """Open the protected OpenClaw dashboard via Custosa."""
     setup_logging(verbose=False, log_file=False)
@@ -265,11 +283,13 @@ def cmd_dashboard(args):
             pass
     url = f"http://127.0.0.1:{listen_port}/?token={quote(token)}"
     print(f"Opening protected dashboard: {url}")
-    webbrowser.open(url)
+    _open_url(url)
 
 
 def _auto_open_dashboard() -> bool:
     """Open protected dashboard if possible (best-effort)."""
+    if not CUSTOSA_CONFIG.exists():
+        return False
     token = _read_gateway_token()
     if not token:
         return False
@@ -281,21 +301,7 @@ def _auto_open_dashboard() -> bool:
         except Exception:
             pass
     url = f"http://127.0.0.1:{listen_port}/?token={quote(token)}"
-    try:
-        webbrowser.open(url)
-        return True
-    except Exception:
-        return False
-    
-    # Check Moltbot configuration
-    detector = MoltbotDetector()
-    found, message = detector.detect()
-    if found:
-        print(f"✅ Moltbot: {message}")
-    else:
-        print(f"⚠️  Moltbot: {message}")
-    
-    print()
+    return _open_url(url)
 
 
 def cmd_stop(args):

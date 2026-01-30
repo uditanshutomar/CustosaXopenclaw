@@ -12,18 +12,14 @@ Release flow (example):
 
    ./scripts/build_macos.sh
 
-2) Package the DMG:
+2) Package the ZIP:
 
-   ./scripts/package_dmg.sh
+   ./scripts/package_zip.sh
 
-3) Rename the DMG (if needed):
+3) Create a GitHub release and upload the ZIP to the release tag.
 
-   mv dist/Custosa.dmg dist/CustosaXopenclaw.dmg
+4) Compute checksum:
 
-4) Create a GitHub release and upload the DMG to the release tag.
+   shasum -a 256 dist/CustosaXopenclaw.zip
 
-5) Compute checksum:
-
-   shasum -a 256 dist/CustosaXopenclaw.dmg
-
-6) Update the cask in your tap (version + sha256) and commit/tag the release.
+5) Update the cask in your tap (version + sha256) and commit/tag the release.

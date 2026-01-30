@@ -575,18 +575,32 @@ def _read_gateway_token() -> Optional[str]:
     return None
 
 
+def _open_url(url: str) -> bool:
+    try:
+        if sys.platform == "darwin":
+            result = subprocess.run(["/usr/bin/open", url], check=False)
+            return result.returncode == 0
+        if sys.platform.startswith("linux"):
+            result = subprocess.run(["xdg-open", url], check=False)
+            return result.returncode == 0
+    except Exception:
+        pass
+    try:
+        return bool(webbrowser.open(url))
+    except Exception:
+        return False
+
+
 def _open_protected_dashboard(listen_port: int) -> bool:
     token = _read_gateway_token()
     if not token:
         logger.warning("OpenClaw gateway token not found; skipping dashboard auto-open.")
         return False
     url = f"http://127.0.0.1:{listen_port}/?token={quote(token)}"
-    try:
-        webbrowser.open(url)
+    if _open_url(url):
         return True
-    except Exception as exc:
-        logger.warning("Failed to open dashboard: %s", exc)
-        return False
+    logger.warning("Failed to open dashboard.")
+    return False
 
 
 class ServiceManager:

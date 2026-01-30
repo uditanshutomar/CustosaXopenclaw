@@ -1,6 +1,6 @@
 cask "custosa" do
-  version "1.0.4"
-  sha256 "77db276e97ead302a52f04125966bdd075afe4848c0a0d18cff2ae9407b03b85"
+  version "1.0.6"
+  sha256 "69315e37bf71e74b3f3551cb75b38a7e3c3dc0266169a17e83cfbe47c297de96"
 
   url "https://github.com/uditanshutomar/CustosaXopenclaw/releases/download/#{version}/CustosaXopenclaw.zip"
   name "Custosa"
@@ -13,7 +13,12 @@ cask "custosa" do
 
   postflight do
     system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{appdir}/Custosa.app"]
-    system_command "/bin/sh", args: ["-c", "/usr/bin/open -a Custosa >/dev/null 2>&1 &"], sudo: false
+    system_command "/usr/bin/open", args: ["-a", "Custosa"], must_succeed: false
+    console_uid = File.stat("/dev/console").uid
+    system_command "/bin/launchctl",
+                   args: ["asuser", console_uid.to_s, "/usr/bin/open", "-a", "Custosa"],
+                   sudo: true,
+                   must_succeed: false
   end
 
   uninstall launchctl: "com.custosa.proxy"
