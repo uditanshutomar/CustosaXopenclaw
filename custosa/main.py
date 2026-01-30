@@ -266,6 +266,26 @@ def cmd_dashboard(args):
     url = f"http://127.0.0.1:{listen_port}/?token={quote(token)}"
     print(f"Opening protected dashboard: {url}")
     webbrowser.open(url)
+
+
+def _auto_open_dashboard() -> bool:
+    """Open protected dashboard if possible (best-effort)."""
+    token = _read_gateway_token()
+    if not token:
+        return False
+    listen_port = 18789
+    if CUSTOSA_CONFIG.exists():
+        try:
+            cfg = CustosaConfig.load()
+            listen_port = cfg.listen_port
+        except Exception:
+            pass
+    url = f"http://127.0.0.1:{listen_port}/?token={quote(token)}"
+    try:
+        webbrowser.open(url)
+        return True
+    except Exception:
+        return False
     
     # Check Moltbot configuration
     detector = MoltbotDetector()
@@ -480,6 +500,8 @@ def main():
                 maybe_prompt_update(force=True)
             except Exception:
                 pass
+            if _auto_open_dashboard():
+                sys.exit(0)
             cmd_install(argparse.Namespace(verbose=args.verbose))
             sys.exit(0)
         parser.print_help()
