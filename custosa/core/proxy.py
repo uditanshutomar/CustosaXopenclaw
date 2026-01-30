@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Set
 
 from aiohttp import web, ClientSession, WSMsgType
+from urllib.parse import parse_qsl, urlencode
 
 from ..detection.engine import DetectionEngine, DetectionResult, Decision
 from ..telegram.bot import TelegramApprovalBot
@@ -258,7 +259,7 @@ class CustosaProxy:
         self._app = web.Application()
         self._app.router.add_route("*", "/{tail:.*}", self._handle_http_or_ws)
 
-        self._runner = web.AppRunner(self._app)
+        self._runner = web.AppRunner(self._app, access_log=None)
         await self._runner.setup()
 
         main_site = web.TCPSite(self._runner, self.config.listen_host, self.config.listen_port)
@@ -707,6 +708,12 @@ class CustosaProxy:
             result.confidence,
             result.reason
         )
+        if result.decision in (Decision.BLOCK, Decision.HOLD):
+            logger.warning(
+                "[%s] Detection patterns: %s",
+                client_id,
+                ", ".join(result.patterns_matched) if result.patterns_matched else "(none)"
+            )
 
         if result.decision == Decision.HOLD:
             request_id = str(uuid.uuid4())[:12]
@@ -776,6 +783,12 @@ class CustosaProxy:
             decision=decision,
             content=combined_text,
         )
+        if decision in (Decision.BLOCK, Decision.HOLD):
+            logger.warning(
+                "[%s] Tool detection patterns: %s",
+                client_id,
+                ", ".join(result.patterns_matched) if result.patterns_matched else "(none)"
+            )
 
         if decision == Decision.HOLD:
             request_id = str(uuid.uuid4())[:12]
@@ -980,7 +993,24 @@ class CustosaProxy:
         def visit(value: Any, key: Optional[str] = None):
             if len(results) >= max_items:
                 return
-            if isinstance(value, str):
+            if isinstance(value, dict):
+                role = value.get("role")
+                if role is not None:
+                    if not self._is_user_role(str(role)):
+                        return
+                    # For user-role messages, only collect user content fields
+                    for field in ("content", "text", "message", "input"):
+                        if field in value:
+                            visit(value[field], field)
+                    return
+                for k, v in value.items():
+                    if str(k).lower() in SENSITIVE_KEYS:
+                        continue
+                    visit(v, str(k))
+            elif isinstance(value, list):
+                for item in value:
+                    visit(item, key)
+            elif isinstance(value, str):
                 if key and key.lower() in SENSITIVE_KEYS:
                     return
                 if key and key.lower() in TEXT_KEYS:
@@ -989,15 +1019,6 @@ class CustosaProxy:
                 # If key isn't provided, only collect short free strings to avoid noise
                 if key is None and len(value) <= 4000:
                     results.append(value)
-                return
-            if isinstance(value, dict):
-                for k, v in value.items():
-                    if str(k).lower() in SENSITIVE_KEYS:
-                        continue
-                    visit(v, str(k))
-            elif isinstance(value, list):
-                for item in value:
-                    visit(item, key)
 
         visit(obj)
         return [t for t in results if isinstance(t, str) and t.strip()]
@@ -1197,13 +1218,14 @@ class CustosaProxy:
         self._log_discovery(event)
 
     def _log_http_request(self, request: web.Request, request_id: str) -> None:
+        sanitized_query = self._sanitize_query(request.query_string)
         event = {
             "kind": "http",
             "phase": "request",
             "id": request_id,
             "method": request.method,
             "path": request.path,
-            "query": request.query_string,
+            "query": sanitized_query,
             "content_type": request.content_type,
             "content_length": request.content_length,
         }
@@ -1227,6 +1249,27 @@ class CustosaProxy:
             "content_length": headers.get("Content-Length"),
         }
         self._log_discovery(event)
+
+    def _is_user_role(self, role: Optional[str]) -> bool:
+        if role is None:
+            return False
+        return str(role).strip().lower() in {"user", "human"}
+
+    def _sanitize_query(self, query: str) -> str:
+        if not query:
+            return ""
+        try:
+            pairs = parse_qsl(query, keep_blank_values=True)
+        except Exception:
+            return ""
+        sanitized = []
+        for key, value in pairs:
+            lowered = str(key).lower()
+            if lowered in SENSITIVE_KEYS or any(token in lowered for token in ("token", "key", "secret", "auth", "session", "cookie")):
+                sanitized.append((key, "[redacted]"))
+            else:
+                sanitized.append((key, value))
+        return urlencode(sanitized)
 
     def get_stats(self) -> dict:
         """Get proxy statistics"""

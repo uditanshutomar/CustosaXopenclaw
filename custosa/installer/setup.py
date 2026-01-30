@@ -31,6 +31,7 @@ OPENCLAW_CONFIG = Path.home() / ".openclaw" / "moltbot.json"
 CLAWDBOT_CONFIG = Path.home() / ".clawdbot" / "clawdbot.json"
 MOLTBOT_CONFIG = Path.home() / ".clawdbot" / "moltbot.json"
 LAUNCHD_PLIST = Path.home() / "Library" / "LaunchAgents" / "com.custosa.proxy.plist"
+OPENCLAW_GATEWAY_PLIST = Path.home() / "Library" / "LaunchAgents" / "ai.openclaw.gateway.plist"
 
 
 class ConfigValidationError(Exception):
@@ -203,6 +204,29 @@ class MoltbotDetector:
         self.config_path: Optional[Path] = None
         self._config_candidates = [OPENCLAW_CONFIG, MOLTBOT_CONFIG, CLAWDBOT_CONFIG]
         self.original_port: Optional[int] = None
+        self.cli_path: Optional[str] = None
+
+    def _find_cli(self) -> Optional[str]:
+        return shutil.which("openclaw") or shutil.which("moltbot") or shutil.which("clawdbot")
+
+    def _run_cli(self, *args: str) -> bool:
+        if not self.cli_path:
+            return False
+        try:
+            subprocess.run([self.cli_path, *args], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return True
+        except Exception as exc:
+            logger.warning("CLI command failed: %s %s (%s)", self.cli_path, " ".join(args), exc)
+            return False
+
+    def _ensure_openclaw_dirs(self) -> None:
+        try:
+            (Path.home() / ".openclaw").mkdir(parents=True, exist_ok=True)
+            (Path.home() / ".openclaw" / "canvas").mkdir(parents=True, exist_ok=True)
+            (Path.home() / ".openclaw" / "workspace").mkdir(parents=True, exist_ok=True)
+            (Path.home() / ".openclaw" / "agents" / "main" / "sessions").mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            logger.warning("Failed to create OpenClaw directories: %s", exc)
     
     def detect(self) -> Tuple[bool, str]:
         """
@@ -211,15 +235,21 @@ class MoltbotDetector:
         Returns:
             Tuple of (found: bool, message: str)
         """
-        # Check for config file
+        # Check for moltbot or clawdbot CLI
+        self.cli_path = self._find_cli()
+        if not self.cli_path:
+            return False, "moltbot/clawdbot CLI not found in PATH"
+
+        # Ensure OpenClaw state exists (best effort)
+        self._ensure_openclaw_dirs()
+
+        # Ensure config exists (run setup if needed)
         self.config_path = next((p for p in self._config_candidates if p.exists()), None)
+        if not self.config_path and self.cli_path:
+            self._run_cli("setup")
+            self.config_path = next((p for p in self._config_candidates if p.exists()), None)
         if not self.config_path:
             return False, f"Gateway config not found at {self._config_candidates[0]} or {self._config_candidates[1]}"
-
-        # Check for moltbot or clawdbot CLI
-        moltbot_path = shutil.which("openclaw") or shutil.which("moltbot") or shutil.which("clawdbot")
-        if not moltbot_path:
-            return False, "moltbot/clawdbot CLI not found in PATH"
         
         # Try to read config
         try:
@@ -261,19 +291,35 @@ class MoltbotDetector:
                 shutil.copy(self.config_path, backup_path)
                 logger.info(f"Backed up original config to {backup_path}")
             
-            # Update gateway port
-            if "gateway" not in config:
-                config["gateway"] = {}
-            
-            config["gateway"]["port"] = upstream_port
+            # Update gateway settings
+            gateway = config.setdefault("gateway", {})
+            gateway["port"] = upstream_port
+            # Ensure gateway is allowed to start locally
+            if not gateway.get("mode"):
+                gateway["mode"] = "local"
+            # Trust local proxy headers to preserve local client detection
+            trusted = gateway.get("trustedProxies")
+            if not isinstance(trusted, list):
+                trusted = []
+            for ip in ("127.0.0.1", "::1"):
+                if ip not in trusted:
+                    trusted.append(ip)
+            gateway["trustedProxies"] = trusted
             
             # Remove legacy keys that OpenClaw rejects
             config.pop("_custosa", None)
             config.pop("version", None)
-            
+
+            # Ensure OpenClaw state dirs exist (best effort)
+            self._ensure_openclaw_dirs()
+
             # Write updated config
             with open(self.config_path, 'w') as f:
                 json.dump(config, f, indent=2)
+
+            # Best-effort fix via CLI if available
+            if self.cli_path:
+                self._run_cli("doctor", "--fix")
             
             logger.info(f"Configured Moltbot: gateway port {self.original_port} -> {upstream_port}")
             logger.info(f"Clients should connect to Custosa on port {custosa_port}")
@@ -482,6 +528,27 @@ class TelegramSetupGUI:
             self.chat_id = input("Your Chat ID: ").strip()
         
         return self.bot_token, self.chat_id
+
+
+def _start_openclaw_gateway() -> bool:
+    """Best-effort start for the OpenClaw gateway LaunchAgent."""
+    if not OPENCLAW_GATEWAY_PLIST.exists():
+        return False
+    domain = f"gui/{os.getuid()}"
+    label = "ai.openclaw.gateway"
+    commands = [
+        ["launchctl", "bootstrap", domain, str(OPENCLAW_GATEWAY_PLIST)],
+        ["launchctl", "enable", f"{domain}/{label}"],
+        ["launchctl", "kickstart", "-k", f"{domain}/{label}"],
+    ]
+    ok = True
+    for cmd in commands:
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except Exception as exc:
+            logger.warning("OpenClaw gateway start step failed: %s (%s)", " ".join(cmd), exc)
+            ok = False
+    return ok
 
 
 class ServiceManager:
@@ -725,6 +792,10 @@ def run_installer():
         print("✅ Moltbot configured")
         print(f"   • Custosa listens on port {config.listen_port}")
         print(f"   • Moltbot moved to port {config.upstream_port}")
+        if _start_openclaw_gateway():
+            print("✅ OpenClaw gateway service started")
+        else:
+            print("⚠️  OpenClaw gateway service not started automatically")
     else:
         print("❌ Failed to configure Moltbot")
         return False

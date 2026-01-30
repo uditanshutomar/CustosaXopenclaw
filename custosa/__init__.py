@@ -2,7 +2,7 @@
 Custosa - Prompt Injection Protection for Moltbot
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __author__ = "Custosa"
 __license__ = "MIT"
 
