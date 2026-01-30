@@ -73,7 +73,8 @@ def setup_logging(verbose: bool = False, log_file: bool = True):
 def cmd_install(args):
     """Run installation wizard"""
     setup_logging(verbose=args.verbose, log_file=False)
-    success = run_installer()
+    reconfigure_telegram = getattr(args, "reconfigure_telegram", False)
+    success = run_installer(reconfigure_telegram=reconfigure_telegram)
     sys.exit(0 if success else 1)
 
 
@@ -457,6 +458,11 @@ def main():
     
     # install
     install_parser = subparsers.add_parser("install", help="Run installation wizard")
+    install_parser.add_argument(
+        "--reconfigure-telegram",
+        action="store_true",
+        help="Force Telegram setup GUI to open even if already configured"
+    )
     install_parser.set_defaults(func=cmd_install)
     
     # serve
