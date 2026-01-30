@@ -17,7 +17,19 @@ import logging
 import sys
 import json
 import signal
+import os
 from pathlib import Path
+
+# Allow running as a script or PyInstaller entrypoint.
+if __package__ in (None, ""):
+    base = getattr(sys, "_MEIPASS", None)
+    if base and base not in sys.path:
+        sys.path.insert(0, base)
+    here = os.path.abspath(os.path.dirname(__file__))
+    parent = os.path.dirname(here)
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+    __package__ = "custosa"
 
 from .core.proxy import CustosaProxy, ProxyConfig, run_proxy
 from .detection.engine import DetectionEngine, DetectionConfig, Decision
