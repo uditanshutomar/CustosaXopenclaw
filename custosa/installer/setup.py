@@ -553,6 +553,36 @@ def _start_openclaw_gateway() -> bool:
     return ok
 
 
+def _restart_custosa_service() -> bool:
+    if sys.platform == "darwin":
+        domain = f"gui/{os.getuid()}"
+        label = "com.custosa.proxy"
+        try:
+            subprocess.run(
+                ["launchctl", "kickstart", "-k", f"{domain}/{label}"],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            return True
+        except Exception as exc:
+            logger.warning("Failed to restart Custosa service: %s", exc)
+            return False
+    if sys.platform.startswith("linux"):
+        try:
+            subprocess.run(
+                ["systemctl", "--user", "restart", "custosa"],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            return True
+        except Exception as exc:
+            logger.warning("Failed to restart Custosa service: %s", exc)
+            return False
+    return False
+
+
 def _read_gateway_token() -> Optional[str]:
     candidates = [OPENCLAW_CONFIG, MOLTBOT_CONFIG, CLAWDBOT_CONFIG]
     for path in candidates:
@@ -816,27 +846,23 @@ def run_installer():
     
     print(f"✅ {message}")
     
-    # Step 2: Configure Telegram
-    print("\n[2/5] Setting up Telegram integration...")
-    gui = TelegramSetupGUI()
-    bot_token, chat_id = gui.run()
-    
-    if bot_token and chat_id:
-        print("✅ Telegram configured")
+    # Step 2: Create or load configuration (Telegram may be configured later)
+    print("\n[2/5] Preparing Custosa configuration...")
+    if CUSTOSA_CONFIG.exists():
+        try:
+            config = CustosaConfig.load()
+            print(f"✅ Configuration loaded from {CUSTOSA_CONFIG}")
+        except Exception:
+            config = CustosaConfig()
+            config.save()
+            print(f"✅ Configuration reset to defaults at {CUSTOSA_CONFIG}")
     else:
-        print("⚠️  Telegram skipped - suspicious requests will be auto-blocked")
+        config = CustosaConfig()
+        config.save()
+        print(f"✅ Configuration saved to {CUSTOSA_CONFIG}")
     
-    # Step 3: Create configuration
-    print("\n[3/5] Creating Custosa configuration...")
-    config = CustosaConfig(
-        telegram_bot_token=bot_token,
-        telegram_chat_id=chat_id
-    )
-    config.save()
-    print(f"✅ Configuration saved to {CUSTOSA_CONFIG}")
-    
-    # Step 4: Configure Moltbot
-    print("\n[4/5] Configuring Moltbot to use Custosa...")
+    # Step 3: Configure Moltbot
+    print("\n[3/5] Configuring Moltbot to use Custosa...")
     if detector.configure_for_custosa(
         custosa_port=config.listen_port,
         upstream_port=config.upstream_port
@@ -852,13 +878,31 @@ def run_installer():
         print("❌ Failed to configure Moltbot")
         return False
     
-    # Step 5: Install service
-    print("\n[5/5] Installing background service...")
+    # Step 4: Install service (start first)
+    print("\n[4/5] Installing background service...")
     service_mgr = ServiceManager()
     if service_mgr.install(config):
         print("✅ Service installed and started")
     else:
         print("⚠️  Service installation failed - run manually with: custosa serve")
+
+    # Step 5: Telegram configuration (after service start)
+    needs_telegram = not (config.telegram_bot_token and config.telegram_chat_id)
+    if needs_telegram:
+        print("\n[5/5] Setting up Telegram integration...")
+        gui = TelegramSetupGUI()
+        bot_token, chat_id = gui.run()
+        if bot_token and chat_id:
+            config.telegram_bot_token = bot_token
+            config.telegram_chat_id = chat_id
+            config.save()
+            print("✅ Telegram configured")
+            if _restart_custosa_service():
+                print("✅ Service restarted with Telegram configuration")
+        else:
+            print("⚠️  Telegram skipped - suspicious requests will be auto-blocked")
+    else:
+        print("\n[5/5] Telegram already configured")
     
     # Done!
     print("\n" + "=" * 60)

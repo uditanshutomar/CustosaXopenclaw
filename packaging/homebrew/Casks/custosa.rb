@@ -1,6 +1,6 @@
 cask "custosa" do
-  version "1.0.6"
-  sha256 "69315e37bf71e74b3f3551cb75b38a7e3c3dc0266169a17e83cfbe47c297de96"
+  version "1.0.7"
+  sha256 "561ca016651ee611c939a15eb87d81168a7d6ed221b34fa5f102cb3a9bbc4338"
 
   url "https://github.com/uditanshutomar/CustosaXopenclaw/releases/download/#{version}/CustosaXopenclaw.zip"
   name "Custosa"
@@ -10,6 +10,7 @@ cask "custosa" do
   depends_on macos: ">= :ventura"
 
   app "Custosa.app"
+  binary "#{appdir}/Custosa.app/Contents/MacOS/Custosa", target: "custosa"
 
   postflight do
     system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{appdir}/Custosa.app"]
