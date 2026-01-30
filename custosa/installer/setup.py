@@ -27,6 +27,7 @@ logger = logging.getLogger("custosa.installer")
 # Paths
 CUSTOSA_DIR = Path.home() / ".custosa"
 CUSTOSA_CONFIG = CUSTOSA_DIR / "config.json"
+OPENCLAW_CONFIG = Path.home() / ".openclaw" / "moltbot.json"
 CLAWDBOT_CONFIG = Path.home() / ".clawdbot" / "clawdbot.json"
 MOLTBOT_CONFIG = Path.home() / ".clawdbot" / "moltbot.json"
 LAUNCHD_PLIST = Path.home() / "Library" / "LaunchAgents" / "com.custosa.proxy.plist"
@@ -200,7 +201,7 @@ class MoltbotDetector:
     
     def __init__(self):
         self.config_path: Optional[Path] = None
-        self._config_candidates = [CLAWDBOT_CONFIG, MOLTBOT_CONFIG]
+        self._config_candidates = [OPENCLAW_CONFIG, MOLTBOT_CONFIG, CLAWDBOT_CONFIG]
         self.original_port: Optional[int] = None
     
     def detect(self) -> Tuple[bool, str]:
@@ -216,7 +217,7 @@ class MoltbotDetector:
             return False, f"Gateway config not found at {self._config_candidates[0]} or {self._config_candidates[1]}"
 
         # Check for moltbot or clawdbot CLI
-        moltbot_path = shutil.which("moltbot") or shutil.which("clawdbot")
+        moltbot_path = shutil.which("openclaw") or shutil.which("moltbot") or shutil.which("clawdbot")
         if not moltbot_path:
             return False, "moltbot/clawdbot CLI not found in PATH"
         
@@ -266,13 +267,9 @@ class MoltbotDetector:
             
             config["gateway"]["port"] = upstream_port
             
-            # Add Custosa marker
-            config["_custosa"] = {
-                "enabled": True,
-                "original_port": self.original_port,
-                "custosa_port": custosa_port,
-                "upstream_port": upstream_port
-            }
+            # Remove legacy keys that OpenClaw rejects
+            config.pop("_custosa", None)
+            config.pop("version", None)
             
             # Write updated config
             with open(self.config_path, 'w') as f:
@@ -563,16 +560,28 @@ class ServiceManager:
         try:
             LAUNCHD_PLIST.parent.mkdir(parents=True, exist_ok=True)
             LAUNCHD_PLIST.write_text(plist_content)
-            
-            # Load the service
+
+            uid = os.getuid()
+            domain = f"gui/{uid}"
+            label = "com.custosa.proxy"
+
+            # Use modern launchctl commands (load/unload are deprecated)
             subprocess.run(
-                ["launchctl", "load", str(LAUNCHD_PLIST)],
+                ["launchctl", "bootstrap", domain, str(LAUNCHD_PLIST)],
                 check=True
             )
-            
+            subprocess.run(
+                ["launchctl", "enable", f"{domain}/{label}"],
+                check=True
+            )
+            subprocess.run(
+                ["launchctl", "kickstart", "-k", f"{domain}/{label}"],
+                check=True
+            )
+
             logger.info(f"Installed launchd service: {LAUNCHD_PLIST}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to install launchd service: {e}")
             return False
@@ -599,13 +608,16 @@ class ServiceManager:
     def _uninstall_launchd(self) -> bool:
         """Uninstall macOS launchd service"""
         try:
+            uid = os.getuid()
+            domain = f"gui/{uid}"
+            label = "com.custosa.proxy"
+            subprocess.run(
+                ["launchctl", "bootout", f"{domain}/{label}"],
+                check=False
+            )
             if LAUNCHD_PLIST.exists():
-                subprocess.run(
-                    ["launchctl", "unload", str(LAUNCHD_PLIST)],
-                    check=False
-                )
                 LAUNCHD_PLIST.unlink()
-                logger.info("Uninstalled launchd service")
+            logger.info("Uninstalled launchd service")
             return True
         except Exception as e:
             logger.error(f"Failed to uninstall launchd service: {e}")
