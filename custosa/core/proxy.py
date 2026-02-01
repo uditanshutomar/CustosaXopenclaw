@@ -46,6 +46,16 @@ ANALYZED_METHODS = {
     "node.invoke",
 }
 
+# RPC methods that modify security settings - always HOLD for approval
+DANGEROUS_RPC_METHODS = {
+    "config.apply",      # Full config replacement
+    "config.patch",      # Partial config update
+    "config.set",        # Single key update
+    "allowlist.add",     # Add sender to allowlist
+    "allowlist.remove",  # Remove sender from allowlist
+    "tools.elevated",    # Modify elevated tool permissions
+}
+
 TEXT_KEYS = {
     "message",
     "prompt",
@@ -189,6 +199,12 @@ class CustosaProxy:
 
         # Connection tracking
         self._connections: Dict[str, tuple] = {}  # client_id -> (client_ws, upstream_ws)
+
+        # Session context tracking for multi-message attack detection
+        # client_id -> list of (timestamp, content_snippet) tuples
+        self._session_context: Dict[str, list] = {}
+        self._session_context_max_messages = 10  # Keep last N messages
+        self._session_context_window_seconds = 300  # 5 minute window
 
         # Stats
         self._stats = {
@@ -437,6 +453,7 @@ class CustosaProxy:
             logger.error("[%s] WebSocket upstream error: %s", client_id, e)
         finally:
             self._connections.pop(client_id, None)
+            self._clear_session_context(client_id)
             try:
                 await ws_client.close()
             except Exception:
@@ -590,6 +607,23 @@ class CustosaProxy:
                         parsed=parsed,
                     )
 
+                    # Check for dangerous RPC methods first (always HOLD)
+                    if msg_type == "req" and msg_method in DANGEROUS_RPC_METHODS:
+                        logger.warning(
+                            "[%s] Dangerous RPC method detected: %s",
+                            client_id, msg_method
+                        )
+                        decision, result = await self._handle_dangerous_rpc(
+                            client_id, message, parsed, msg_method, client_ws, upstream_ws
+                        )
+                        if decision == Decision.ALLOW:
+                            self._stats["allowed"] += 1
+                            await upstream_ws.send_str(message)
+                        elif decision == Decision.BLOCK:
+                            self._stats["blocked"] += 1
+                            await self._send_block_response(client_ws, parsed, result)
+                        continue
+
                     should_analyze = False
                     if msg_type == "req":
                         if msg_method in ANALYZED_METHODS:
@@ -649,20 +683,35 @@ class CustosaProxy:
                 break
 
     async def _proxy_upstream_to_client(self, client_id: str, client_ws, upstream_ws):
-        """Proxy messages from upstream to client (pass-through)"""
+        """Proxy messages from upstream to client with output filtering."""
         async for msg in upstream_ws:
             if msg.type == WSMsgType.TEXT:
+                parsed = None
                 if len(msg.data) <= MAX_LOG_PARSE_BYTES:
                     try:
                         parsed = json.loads(msg.data)
                     except json.JSONDecodeError:
-                        parsed = None
+                        pass
                     if isinstance(parsed, dict):
                         self._log_ws_message(
                             direction="gateway_to_client",
                             raw_len=len(msg.data),
                             parsed=parsed,
                         )
+
+                # Analyze outbound event messages for potential exfiltration
+                if parsed and isinstance(parsed, dict):
+                    should_filter = await self._should_filter_response(client_id, parsed)
+                    if should_filter:
+                        logger.warning(
+                            "[%s] Filtered suspicious outbound content",
+                            client_id
+                        )
+                        # Send sanitized response instead
+                        filtered = self._sanitize_response(parsed)
+                        await self._ws_send_text(client_ws, json.dumps(filtered))
+                        continue
+
                 await self._ws_send_text(client_ws, msg.data)
             elif msg.type == WSMsgType.BINARY:
                 await self._ws_send_bytes(client_ws, msg.data)
@@ -672,6 +721,164 @@ class CustosaProxy:
                 await client_ws.pong(msg.data)
             elif msg.type in (WSMsgType.CLOSE, WSMsgType.ERROR):
                 break
+
+    async def _should_filter_response(self, client_id: str, parsed: dict) -> bool:
+        """Check if outbound response contains suspicious content."""
+        msg_type = parsed.get("type")
+
+        # Only analyze event messages (agent output streams)
+        if msg_type != "event":
+            return False
+
+        event_type = parsed.get("event", "")
+        payload = parsed.get("payload", {})
+
+        # Check for tool execution results that might contain exfiltration
+        if event_type in ("tool.result", "tool.output", "agent.output"):
+            content = ""
+            if isinstance(payload, dict):
+                content = str(payload.get("content", "") or payload.get("output", ""))
+            elif isinstance(payload, str):
+                content = payload
+
+            if content:
+                # Quick check for obvious exfiltration patterns in output
+                result = await self.detection.analyze(content)
+                if result.confidence >= 0.85:
+                    logger.warning(
+                        "[%s] High-confidence suspicious output (%.2f): %s",
+                        client_id, result.confidence, result.reason
+                    )
+                    return True
+
+        return False
+
+    def _sanitize_response(self, parsed: dict) -> dict:
+        """Return a sanitized version of a suspicious response."""
+        return {
+            "type": parsed.get("type"),
+            "event": parsed.get("event"),
+            "payload": {
+                "content": "[Content filtered by Custosa: Potential security concern detected]",
+                "filtered": True,
+                "reason": "Suspicious content pattern detected in agent output"
+            },
+            "seq": parsed.get("seq"),
+        }
+
+    def _track_session_context(self, client_id: str, content: str) -> None:
+        """Track message content for session context analysis."""
+        now = time.time()
+        if client_id not in self._session_context:
+            self._session_context[client_id] = []
+
+        # Add new message (keep snippet for memory efficiency)
+        snippet = content[:200] if content else ""
+        self._session_context[client_id].append((now, snippet))
+
+        # Prune old messages outside the time window
+        cutoff = now - self._session_context_window_seconds
+        self._session_context[client_id] = [
+            (ts, s) for ts, s in self._session_context[client_id]
+            if ts >= cutoff
+        ][-self._session_context_max_messages:]
+
+    def _get_session_context(self, client_id: str) -> str:
+        """Get combined session context for analysis."""
+        if client_id not in self._session_context:
+            return ""
+        now = time.time()
+        cutoff = now - self._session_context_window_seconds
+        recent = [s for ts, s in self._session_context[client_id] if ts >= cutoff]
+        return "\n---\n".join(recent)
+
+    async def _analyze_with_context(
+        self, client_id: str, content: str
+    ) -> tuple[float, list]:
+        """Analyze content with session context for multi-message attacks."""
+        # Track this message
+        self._track_session_context(client_id, content)
+
+        # Get combined context
+        context = self._get_session_context(client_id)
+
+        # If we have multiple messages, analyze combined context
+        if context.count("---") >= 2:  # At least 3 messages
+            context_result = await self.detection.analyze(context)
+            if context_result.confidence > 0.5:
+                logger.info(
+                    "[%s] Context analysis boost: %.2f (patterns: %s)",
+                    client_id,
+                    context_result.confidence,
+                    context_result.patterns_matched
+                )
+                return context_result.confidence * 0.3, context_result.patterns_matched
+
+        return 0.0, []
+
+    def _clear_session_context(self, client_id: str) -> None:
+        """Clear session context for a client (on disconnect)."""
+        self._session_context.pop(client_id, None)
+
+    async def _handle_dangerous_rpc(
+        self,
+        client_id: str,
+        raw_message: str,
+        parsed: dict,
+        method: str,
+        client_ws,
+        upstream_ws
+    ) -> tuple[Decision, DetectionResult]:
+        """Handle dangerous RPC methods that modify security settings."""
+        # Create a detection result for dangerous RPC
+        result = DetectionResult(
+            decision=Decision.HOLD,
+            confidence=0.95,
+            reason=f"Security-sensitive RPC method: {method}",
+            patterns_matched=[f"dangerous_rpc:{method}"]
+        )
+
+        request_id = str(uuid.uuid4())[:12]
+        telegram_sent = False
+
+        if self.telegram:
+            # Format params for preview
+            params = parsed.get("params", {})
+            preview = f"Method: {method}\nParams: {json.dumps(params, indent=2)[:400]}"
+
+            telegram_sent = await self.telegram.request_approval(
+                request_id=request_id,
+                content_preview=preview,
+                confidence=result.confidence,
+                reason=f"Dangerous RPC: {method}",
+                patterns_matched=[f"rpc:{method}"]
+            )
+
+        if telegram_sent:
+            held = HeldRequest(
+                request_id=request_id,
+                client_ws=client_ws,
+                upstream_ws=upstream_ws,
+                original_frame=raw_message,
+                parsed_message=parsed,
+                detection_result=result,
+                timeout_seconds=self.config.hold_timeout_seconds
+            )
+            async with _held_requests_lock:
+                self._held_requests[request_id] = held
+
+            await self._send_hold_response(client_ws, parsed, request_id)
+            self._stats["held"] += 1
+            return Decision.HOLD, result
+        else:
+            # No Telegram - block for safety
+            logger.warning(
+                "[%s] Telegram unavailable, blocking dangerous RPC: %s",
+                client_id, method
+            )
+            result.decision = Decision.BLOCK
+            result.reason = f"Dangerous RPC blocked (no approval channel): {method}"
+            return Decision.BLOCK, result
 
     async def _analyze_and_decide(
         self,
@@ -702,6 +909,20 @@ class CustosaProxy:
             )
 
         result = await self.detection.analyze(content)
+
+        # Apply session context boost for multi-message attack detection
+        context_boost, context_patterns = await self._analyze_with_context(client_id, content)
+        if context_boost > 0:
+            original_confidence = result.confidence
+            result.confidence = min(result.confidence + context_boost, 1.0)
+            result.patterns_matched.extend([f"context:{p}" for p in context_patterns[:3]])
+            if result.confidence >= 0.7 and original_confidence < 0.7:
+                result.decision = Decision.HOLD
+                result.reason = f"{result.reason} [context boost: +{context_boost:.2f}]"
+            logger.info(
+                "[%s] Context boost applied: %.2f -> %.2f",
+                client_id, original_confidence, result.confidence
+            )
 
         logger.info(
             "[%s] Detection: %s (confidence=%.2f, reason=%s)",

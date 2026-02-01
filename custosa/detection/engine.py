@@ -251,6 +251,23 @@ class PatternMatcher:
                 r"tool_use.*(?:rm\s+-rf|chmod|chown|curl|wget|nc\s+-)",
             ]
         },
+
+        # Slash command abuse (CRITICAL - OpenClaw commands)
+        "slash_command": {
+            "confidence": 0.90,
+            "patterns": [
+                r"^/exec\b",                    # Direct /exec command
+                r"^/bash\b",                    # Direct /bash command
+                r"^/config\s+set\b",            # Config modification
+                r"^/debug\b",                   # Debug mode (owner-only)
+                r"^/allowlist\s+add\b",         # Adding to allowlist
+                r"\n/exec\b",                   # /exec after newline (hidden)
+                r"\n/bash\b",                   # /bash after newline (hidden)
+                r"(?:send|type|enter|use)\s+/exec\b",  # Instructing to use /exec
+                r"(?:send|type|enter|use)\s+/bash\b",  # Instructing to use /bash
+                r"run\s+the\s+command\s+/",     # Indirect command invocation
+            ]
+        },
     }
     
     def __init__(self):
