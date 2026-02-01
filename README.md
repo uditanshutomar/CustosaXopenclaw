@@ -107,7 +107,15 @@ The installer will:
 |-------|---------|--------|
 | Pattern Matching | < 1ms | Regex against 50+ known injection signatures |
 | Heuristic Analysis | < 5ms | Structural anomaly detection |
-| ML Classification | < 30ms | Semantic understanding (optional) |
+| Keyword Grouping | < 30ms | Semantic keyword clusters (ML planned) |
+
+### Unicode Normalization
+
+Custosa prevents homoglyph bypass attacks by normalizing text before analysis:
+- **Cyrillic/Greek lookalikes**: `а` (Cyrillic) → `a` (Latin)
+- **Zero-width characters**: Invisible chars removed
+- **NFKC normalization**: Fullwidth and math symbols normalized
+- **Obfuscation penalty**: Significant char differences boost confidence score
 
 ### Pattern Categories
 
@@ -118,6 +126,16 @@ The installer will:
 - **Encoding Evasion**: Base64, Unicode, typoglycemia attacks
 - **Data Exfiltration**: Hidden image tags, external fetch requests
 - **Tool Injection**: Dangerous tool invocation patterns
+
+### Tool Risk Classification
+
+High-risk tool invocations are automatically held for approval regardless of content score:
+
+| Risk Level | Tools | Behavior |
+|------------|-------|----------|
+| CRITICAL | `exec`, `shell`, `bash`, `system.run` | Always HOLD |
+| HIGH | `browser.*`, `web_fetch`, `web_search` | Always HOLD |
+| NORMAL | All others | Score-based decision |
 
 ### Confidence Scoring
 
@@ -142,12 +160,13 @@ Configuration is stored in `~/.custosa/config.json`:
   "upstream_port": 19789,
   "block_threshold": 0.9,
   "hold_threshold": 0.7,
-  "enable_ml": false,
   "telegram_bot_token": "...",
   "telegram_chat_id": "...",
   "hold_timeout_seconds": 300.0,
   "default_on_timeout": "block",
-  "auto_update": true
+  "auto_update": true,
+  "discovery_log_path": "",
+  "discovery_log_sample_rate": 1.0
 }
 ```
 
@@ -159,9 +178,11 @@ Configuration is stored in `~/.custosa/config.json`:
 | `upstream_port` | 19789 | Port Moltbot Gateway runs on |
 | `block_threshold` | 0.9 | Confidence threshold for auto-block |
 | `hold_threshold` | 0.7 | Confidence threshold for Telegram approval |
-| `enable_ml` | false | Enable ML classifier (requires torch) |
 | `hold_timeout_seconds` | 300 | Timeout for Telegram approval (5 minutes) |
-| `default_on_timeout` | "block" | Action when approval times out |
+| `default_on_timeout` | "block" | Action when approval times out ("block" or "allow") |
+| `auto_update` | true | Check for updates automatically |
+| `discovery_log_path` | "" | Path to discovery log (JSONL format, empty = disabled) |
+| `discovery_log_sample_rate` | 1.0 | Sampling rate for discovery logging (0.0-1.0) |
 
 ---
 
@@ -253,19 +274,21 @@ custosa serve --mock-telegram
 ### Project Structure
 
 ```
-├── src/
+├── custosa/
 │   ├── core/
-│   │   └── proxy.py          # WebSocket proxy
+│   │   ├── proxy.py          # WebSocket + HTTP proxy
+│   │   └── discovery.py      # Discovery logging
 │   ├── detection/
 │   │   └── engine.py         # Detection engine
 │   ├── telegram/
 │   │   └── bot.py            # Telegram approval bot
 │   ├── installer/
-│   │   └── setup.py          # Installation wizard
-│   └── main.py               # CLI entry point
-├── tests/
-├── dist/
-│   └── custosa.rb            # Homebrew formula
+│   │   └── setup.py          # Installation wizard + GUI
+│   ├── main.py               # CLI entry point
+│   └── updater.py            # Auto-update checker
+├── homebrew-custosaXopenclaw/
+│   └── Formula/custosa.rb    # Homebrew formula
+├── install.sh                # One-liner installer
 ├── pyproject.toml
 └── README.md
 ```
@@ -274,24 +297,56 @@ custosa serve --mock-telegram
 
 ## Roadmap
 
-### v1.0 (Current)
+### v1.0
 - [x] WebSocket proxy with message interception
 - [x] Multi-layer prompt injection detection
 - [x] Telegram human-in-the-loop approval
 - [x] Auto-configuration of Moltbot
 - [x] macOS/Linux service installation
 
-### v1.1 (Planned)
+### v1.1 (Current)
+- [x] Unicode homoglyph normalization
+- [x] Tool risk classification (auto-HOLD critical tools)
+- [x] Discovery logging for traffic analysis
+- [x] Auto-update checking
+- [x] Retro 8-bit Telegram setup GUI
+
+### v1.2 (Planned)
 - [ ] ML classifier with fine-tuned DeBERTa model
-- [ ] Web dashboard for monitoring
-- [ ] Alert batching to prevent fatigue
-- [ ] Configurable detection rules via YAML
+- [ ] Slash command interception (`/exec`, `/bash`)
+- [ ] Response/output filtering (gateway → client)
+- [ ] Session-aware context analysis
 
 ### v2.0 (Future)
-- [ ] Windows support
-- [ ] Multi-agent support
+- [ ] Web dashboard for monitoring
+- [ ] Multi-agent support with per-agent policies
+- [ ] Config RPC protection (`config.apply`, `config.patch`)
 - [ ] Audit log export (SIEM integration)
-- [ ] Custom policy rules DSL
+- [ ] Windows support
+
+---
+
+## Known Limitations
+
+Current version (v1.1) has the following limitations:
+
+| Limitation | Impact | Planned Fix |
+|------------|--------|-------------|
+| **Input-only filtering** | Gateway responses not analyzed | v1.2 |
+| **No slash command detection** | `/exec`, `/bash` bypass detection | v1.2 |
+| **No session context** | Multi-message attacks may evade | v1.2 |
+| **Single policy** | All agents share same thresholds | v2.0 |
+| **No config RPC protection** | `config.apply` can modify settings | v2.0 |
+
+### What Custosa Analyzes
+
+| Traffic Type | Analyzed | Notes |
+|--------------|----------|-------|
+| WebSocket client → gateway | ✅ Yes | All `agent`, `send`, `chat.*`, `tools.*` methods |
+| WebSocket gateway → client | ❌ No | Pass-through only |
+| HTTP `/tools/invoke` | ✅ Yes | Tool name + arguments |
+| HTTP other endpoints | ❌ No | Proxied without inspection |
+| `connect` handshake | ❌ No | Auth tokens passed through |
 
 ---
 
