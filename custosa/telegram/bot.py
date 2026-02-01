@@ -440,15 +440,17 @@ class MockTelegramBot:
         confidence: float,
         reason: str,
         patterns_matched: list
-    ):
+    ) -> bool:
         logger.info(
             f"[MOCK] Approval request {request_id}: "
             f"confidence={confidence:.2f}, reason={reason}"
         )
-        
+
         if self.auto_approve:
             # Auto-approve after delay
             asyncio.create_task(self._auto_decide(request_id))
+
+        return True
     
     async def _auto_decide(self, request_id: str):
         await asyncio.sleep(self.auto_approve_delay)

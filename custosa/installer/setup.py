@@ -100,6 +100,11 @@ class CustosaConfig:
                 "http_listen_port must not match upstream_port "
                 f"(got {self.http_listen_port})"
             )
+        if self.http_listen_port is not None and self.http_listen_port == self.listen_port:
+            errors.append(
+                "http_listen_port must not match listen_port "
+                f"(got {self.http_listen_port})"
+            )
 
         # Validate thresholds
         if not (0.0 <= self.block_threshold <= 1.0):
