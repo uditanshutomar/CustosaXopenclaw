@@ -820,6 +820,34 @@ class CustosaProxy:
         """Clear session context for a client (on disconnect)."""
         self._session_context.pop(client_id, None)
 
+    def _cleanup_stale_session_context(self) -> None:
+        """Remove stale session context entries for disconnected clients."""
+        now = time.time()
+        cutoff = now - self._session_context_window_seconds
+
+        # Get list of active client IDs
+        active_clients = set(self._connections.keys())
+
+        # Remove entries for disconnected clients or with all stale messages
+        stale_clients = []
+        for client_id, messages in self._session_context.items():
+            if client_id not in active_clients:
+                stale_clients.append(client_id)
+            else:
+                # Check if all messages are stale
+                fresh_messages = [m for m in messages if m[0] >= cutoff]
+                if not fresh_messages:
+                    stale_clients.append(client_id)
+                elif len(fresh_messages) < len(messages):
+                    # Prune stale messages
+                    self._session_context[client_id] = fresh_messages
+
+        for client_id in stale_clients:
+            self._session_context.pop(client_id, None)
+
+        if stale_clients:
+            logger.debug("Cleaned up session context for %d stale clients", len(stale_clients))
+
     async def _handle_dangerous_rpc(
         self,
         client_id: str,
@@ -1158,9 +1186,12 @@ class CustosaProxy:
                 logger.warning("[%s] Client disconnected before denial could be sent", request_id)
 
     async def _check_timeouts(self):
-        """Background task to check for expired held requests"""
+        """Background task to check for expired held requests and stale context"""
         while True:
             await asyncio.sleep(10)
+
+            # Cleanup stale session context entries
+            self._cleanup_stale_session_context()
 
             async with _held_requests_lock:
                 expired = [

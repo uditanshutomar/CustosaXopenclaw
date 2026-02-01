@@ -227,7 +227,15 @@ class PatternMatcher:
                 r"(?:base64|hex|rot13|unicode)\s*(?:decode|encoded?)",
                 r"\\u[0-9a-fA-F]{4}.*(?:ignore|override|system)",
                 r"&#x?[0-9a-fA-F]+;.*(?:ignore|override|system)",
-                r"(?:i|!|1)(?:g|9)n(?:o|0)r(?:e|3)",  # Typoglycemia: ignor3, 1gnore
+                # Typoglycemia: patterns with at least one obfuscated char
+                r"[!1]gnore",         # 1gnore, !gnore
+                r"i9nore",            # i9nore
+                r"ign0re",            # ign0re
+                r"ignor3",            # ignor3
+                r"0verride",          # 0verride
+                r"overr1de",          # overr1de
+                r"syst3m",            # syst3m
+                r"pr0mpt",            # pr0mpt
             ]
         },
         
@@ -260,11 +268,13 @@ class PatternMatcher:
                 r"^/bash\b",                    # Direct /bash command
                 r"^/config\s+set\b",            # Config modification
                 r"^/debug\b",                   # Debug mode (owner-only)
-                r"^/allowlist\s+add\b",         # Adding to allowlist
+                r"^/allowlist\s+(?:add|remove)\b",  # Allowlist modification
                 r"\n/exec\b",                   # /exec after newline (hidden)
                 r"\n/bash\b",                   # /bash after newline (hidden)
+                r"\n/config\b",                 # /config after newline
                 r"(?:send|type|enter|use)\s+/exec\b",  # Instructing to use /exec
                 r"(?:send|type|enter|use)\s+/bash\b",  # Instructing to use /bash
+                r"(?:send|type|enter|use)\s+/config\b",  # Instructing config change
                 r"run\s+the\s+command\s+/",     # Indirect command invocation
             ]
         },
