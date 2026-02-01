@@ -1,21 +1,47 @@
 #!/bin/bash
-# Custosa V1 - One-Click Installer
-# Usage: curl -fsSL https://install.custosa.dev | bash
-#    Or: ./scripts/install.sh
+# Custosa - One-Click Installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/uditanshutomar/CustosaXopenclaw/main/install.sh | bash
 
 set -e
 
 echo ""
-echo "🦞 Custosa V1 Installer"
-echo "   Prompt Injection Protection for Moltbot"
-echo "================================================"
+echo "  ██████╗██╗   ██╗███████╗████████╗ ██████╗ ███████╗ █████╗ "
+echo " ██╔════╝██║   ██║██╔════╝╚══██╔══╝██╔═══██╗██╔════╝██╔══██╗"
+echo " ██║     ██║   ██║███████╗   ██║   ██║   ██║███████╗███████║"
+echo " ██║     ██║   ██║╚════██║   ██║   ██║   ██║╚════██║██╔══██║"
+echo " ╚██████╗╚██████╔╝███████║   ██║   ╚██████╔╝███████║██║  ██║"
+echo "  ╚═════╝ ╚═════╝ ╚══════╝   ╚═╝    ╚═════╝ ╚══════╝╚═╝  ╚═╝"
+echo ""
+echo "  Prompt Injection Protection for OpenClaw/Moltbot"
+echo "  ================================================"
 echo ""
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+success() { echo -e "${GREEN}[OK]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+
+# Detect OS
+detect_os() {
+    case "$(uname -s)" in
+        Darwin*) OS="macos" ;;
+        Linux*)  OS="linux" ;;
+        *)       error "Unsupported operating system" ;;
+    esac
+    info "Detected OS: $OS"
+}
+
+# Check if Homebrew is available
+has_brew() {
+    command -v brew &> /dev/null
+}
 
 # Check Python version
 check_python() {
@@ -23,81 +49,81 @@ check_python() {
         PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
         MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
         MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
-        
+
         if [ "$MAJOR" -ge 3 ] && [ "$MINOR" -ge 10 ]; then
-            echo -e "${GREEN}✓${NC} Python $PYTHON_VERSION found"
+            success "Python $PYTHON_VERSION found"
             return 0
         fi
     fi
-    
-    echo -e "${RED}✗${NC} Python 3.10+ required"
-    echo "  Install with: brew install python@3.11"
-    exit 1
+    return 1
 }
 
-# Check for Moltbot
-check_moltbot() {
-    if [ -f "$HOME/.clawdbot/moltbot.json" ]; then
-        echo -e "${GREEN}✓${NC} Moltbot installation found"
-        return 0
+# Install via Homebrew (preferred)
+install_with_brew() {
+    info "Installing via Homebrew..."
+
+    # Add tap if not already added
+    if ! brew tap | grep -q "uditanshutomar/custosaxopenclaw"; then
+        brew tap uditanshutomar/custosaxopenclaw
     fi
-    
-    echo -e "${YELLOW}⚠${NC} Moltbot not found at ~/.clawdbot/moltbot.json"
-    echo "  Install Moltbot first: https://docs.molt.bot/"
-    echo ""
-    read -p "Continue anyway? [y/N] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
+
+    # Install custosa
+    brew install custosa
+    success "Installed via Homebrew"
 }
 
-# Install Custosa
-install_custosa() {
-    echo ""
-    echo "Installing Custosa..."
-    
-    # Try pip install
-    if pip3 install --user custosa 2>/dev/null; then
-        echo -e "${GREEN}✓${NC} Installed via pip"
-    else
-        # Fall back to local install
-        echo "Installing from local source..."
-        pip3 install --user -e . 2>/dev/null || pip3 install -e .
-        echo -e "${GREEN}✓${NC} Installed from source"
-    fi
-}
+# Install via pip (fallback)
+install_with_pip() {
+    info "Installing via pip..."
 
-# Run setup wizard
-run_setup() {
-    echo ""
-    echo "Running setup wizard..."
-    echo ""
-    
-    # Find custosa in PATH or local
-    if command -v custosa &> /dev/null; then
-        custosa install
-    elif [ -f "./custosa/main.py" ]; then
-        python3 -m custosa.main install
-    else
-        echo -e "${RED}✗${NC} Could not find custosa command"
-        exit 1
+    if ! check_python; then
+        error "Python 3.10+ required. Install with: brew install python@3.12"
+    fi
+
+    pip3 install --user git+https://github.com/uditanshutomar/CustosaXopenclaw.git
+    success "Installed via pip"
+
+    # Ensure ~/.local/bin is in PATH
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        warn "Add ~/.local/bin to your PATH:"
+        echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
     fi
 }
 
 # Main installation flow
 main() {
-    check_python
-    check_moltbot
-    install_custosa
-    run_setup
-    
+    detect_os
+
+    # Check if already installed
+    if command -v custosa &> /dev/null; then
+        warn "Custosa is already installed"
+        custosa --version 2>/dev/null || true
+        echo ""
+        read -p "Reinstall? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 0
+        fi
+    fi
+
+    echo ""
+
+    # Install: prefer Homebrew on macOS, pip elsewhere
+    if [ "$OS" = "macos" ] && has_brew; then
+        install_with_brew
+    elif has_brew; then
+        install_with_brew
+    else
+        install_with_pip
+    fi
+
     echo ""
     echo "================================================"
-    echo -e "${GREEN}🎉 Installation Complete!${NC}"
+    success "Installation Complete!"
     echo "================================================"
     echo ""
-    echo "Custosa is now protecting your Moltbot."
+    echo "Next steps:"
+    echo "  ${GREEN}custosa install${NC}  - Run setup wizard"
     echo ""
     echo "Commands:"
     echo "  custosa status  - Check protection status"
