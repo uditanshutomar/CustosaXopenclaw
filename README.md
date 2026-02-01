@@ -78,6 +78,7 @@ The installer will:
 | Command | Description |
 |---------|-------------|
 | `custosa install` | Run installation wizard |
+| `custosa install --reconfigure-telegram` | Reconfigure Telegram bot |
 | `custosa serve` | Start proxy server (foreground) |
 | `custosa status` | Show protection status |
 | `custosa start` | Start background service |

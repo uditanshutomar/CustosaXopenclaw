@@ -1016,9 +1016,20 @@ def _read_gateway_token() -> Optional[str]:
 
 
 def _open_url(url: str) -> bool:
+    import time
     try:
         if sys.platform == "darwin":
-            result = subprocess.run(["/usr/bin/open", url], check=False)
+            # Small delay to ensure server is ready
+            time.sleep(0.3)
+            # Use open -a to explicitly activate browser
+            result = subprocess.run(
+                ["/usr/bin/open", "-a", "Safari", url],
+                check=False,
+                capture_output=True
+            )
+            if result.returncode != 0:
+                # Fallback to default browser
+                result = subprocess.run(["/usr/bin/open", url], check=False)
             return result.returncode == 0
         if sys.platform.startswith("linux"):
             result = subprocess.run(["xdg-open", url], check=False)
