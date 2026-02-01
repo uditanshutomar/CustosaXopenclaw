@@ -293,9 +293,9 @@ class MoltbotDetector:
                 shutil.copy(self.config_path, backup_path)
                 logger.info(f"Backed up original config to {backup_path}")
             
-            # Update gateway settings
+            # Update gateway settings - clients connect to Custosa port
             gateway = config.setdefault("gateway", {})
-            gateway["port"] = upstream_port
+            gateway["port"] = custosa_port  # Route clients through Custosa
             # Ensure gateway is allowed to start locally
             if not gateway.get("mode"):
                 gateway["mode"] = "local"
