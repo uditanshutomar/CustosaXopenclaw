@@ -24,7 +24,7 @@ classifiers = [
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
@@ -61,10 +61,10 @@ custosa = "custosa.main:main"
 custosa-install = "custosa.installer.setup:run_installer"
 
 [project.urls]
-Homepage = "https://github.com/custosa/custosa"
-Documentation = "https://docs.custosa.dev"
-Repository = "https://github.com/custosa/custosa"
-Issues = "https://github.com/custosa/custosa/issues"
+Homepage = "https://github.com/uditanshutomar/CustosaXopenclaw"
+Documentation = "https://github.com/uditanshutomar/CustosaXopenclaw#readme"
+Repository = "https://github.com/uditanshutomar/CustosaXopenclaw"
+Issues = "https://github.com/uditanshutomar/CustosaXopenclaw/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

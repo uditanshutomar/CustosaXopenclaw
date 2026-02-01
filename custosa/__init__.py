@@ -4,7 +4,7 @@ Custosa - Prompt Injection Protection for Moltbot
 
 __version__ = "1.1.0"
 __author__ = "Custosa"
-__license__ = "MIT"
+__license__ = "Proprietary"
 
 from .core.proxy import CustosaProxy, ProxyConfig
 from .detection.engine import DetectionEngine, DetectionConfig, Decision, DetectionResult

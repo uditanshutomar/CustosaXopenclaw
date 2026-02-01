@@ -2,8 +2,8 @@
 
 **Prompt Injection Protection for Moltbot**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 
 Custosa is a transparent WebSocket proxy that intercepts all traffic to Moltbot Gateway and protects against prompt injection attacks. It provides real-time detection with configurable human-in-the-loop approval via Telegram for uncertain cases.
 
@@ -41,32 +41,24 @@ Custosa is a transparent WebSocket proxy that intercepts all traffic to Moltbot 
 
 ## Installation
 
-### ZIP (macOS)
-
-1. Download `CustosaXopenclaw.zip`
-2. Unzip and drag `Custosa.app` into `/Applications`
-3. Open `Custosa.app` once to run the installer (only Telegram tokens are manual)
-
-### Homebrew (macOS, cask)
+### One-liner (Recommended)
 
 ```bash
-brew tap custosa/tap
-brew install --cask --no-quarantine custosa
-open -a Custosa
+curl -fsSL https://raw.githubusercontent.com/uditanshutomar/CustosaXopenclaw/main/install.sh | bash
 ```
 
-### pip
+### Homebrew (macOS/Linux)
 
 ```bash
-pip install custosa
+brew install uditanshutomar/custosaxopenclaw/custosa
 custosa install
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/custosa/custosa.git
-cd custosa
+git clone https://github.com/uditanshutomar/CustosaXopenclaw.git
+cd CustosaXopenclaw
 pip install -e .
 custosa install
 ```
@@ -239,8 +231,8 @@ Based on OWASP LLM Top 10 2025 and CrowdStrike's 150+ injection technique taxono
 ### Setup
 
 ```bash
-git clone https://github.com/custosa/custosa.git
-cd custosa
+git clone https://github.com/uditanshutomar/CustosaXopenclaw.git
+cd CustosaXopenclaw
 pip install -e ".[dev]"
 ```
 
@@ -304,7 +296,9 @@ custosa serve --mock-telegram
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+Proprietary - see [LICENSE](LICENSE) for details.
+
+Personal, non-commercial use permitted. Commercial licensing available.
 
 ---
 
