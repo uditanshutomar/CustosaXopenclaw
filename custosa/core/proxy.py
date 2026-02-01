@@ -572,10 +572,12 @@ class CustosaProxy:
                     try:
                         parsed = json.loads(message)
                     except json.JSONDecodeError:
+                        logger.debug("Forwarding non-JSON message (len=%d)", len(message))
                         await upstream_ws.send_str(message)
                         continue
 
                     if not isinstance(parsed, dict):
+                        logger.debug("Forwarding non-dict JSON message (len=%d)", len(message))
                         await upstream_ws.send_str(message)
                         continue
 

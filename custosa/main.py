@@ -251,6 +251,16 @@ def _read_gateway_token() -> Optional[str]:
     return None
 
 
+def _get_listen_port(default: int = 18789) -> int:
+    """Get Custosa listen port from config, or return default."""
+    if CUSTOSA_CONFIG.exists():
+        try:
+            return CustosaConfig.load().listen_port
+        except (OSError, json.JSONDecodeError):
+            pass
+    return default
+
+
 def _open_url(url: str) -> bool:
     try:
         if sys.platform == "darwin":
@@ -275,13 +285,7 @@ def cmd_dashboard(args):
         print("❌ OpenClaw gateway token not found.")
         print("Run: openclaw dashboard, then copy the token and open via Custosa.")
         sys.exit(1)
-    listen_port = 18789
-    if CUSTOSA_CONFIG.exists():
-        try:
-            cfg = CustosaConfig.load()
-            listen_port = cfg.listen_port
-        except Exception:
-            pass
+    listen_port = _get_listen_port()
     url = f"http://127.0.0.1:{listen_port}/?token={quote(token)}"
     print(f"Opening protected dashboard: {url}")
     _open_url(url)
@@ -294,13 +298,7 @@ def _auto_open_dashboard() -> bool:
     token = _read_gateway_token()
     if not token:
         return False
-    listen_port = 18789
-    if CUSTOSA_CONFIG.exists():
-        try:
-            cfg = CustosaConfig.load()
-            listen_port = cfg.listen_port
-        except Exception:
-            pass
+    listen_port = _get_listen_port()
     url = f"http://127.0.0.1:{listen_port}/?token={quote(token)}"
     return _open_url(url)
 

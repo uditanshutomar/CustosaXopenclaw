@@ -222,7 +222,7 @@ class MoltbotDetector:
         try:
             subprocess.run([self.cli_path, *args], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             return True
-        except Exception as exc:
+        except (subprocess.SubprocessError, OSError) as exc:
             logger.warning("CLI command failed: %s %s (%s)", self.cli_path, " ".join(args), exc)
             return False
 
@@ -232,7 +232,7 @@ class MoltbotDetector:
             (Path.home() / ".openclaw" / "canvas").mkdir(parents=True, exist_ok=True)
             (Path.home() / ".openclaw" / "workspace").mkdir(parents=True, exist_ok=True)
             (Path.home() / ".openclaw" / "agents" / "main" / "sessions").mkdir(parents=True, exist_ok=True)
-        except Exception as exc:
+        except OSError as exc:
             logger.warning("Failed to create OpenClaw directories: %s", exc)
     
     def detect(self) -> Tuple[bool, str]:
@@ -262,15 +262,15 @@ class MoltbotDetector:
         try:
             with open(self.config_path) as f:
                 config = json.load(f)
-            
+
             # Get current gateway port
             gateway = config.get("gateway", {})
             self.original_port = gateway.get("port", 18789)
-            
+
             return True, f"Moltbot found (gateway port: {self.original_port})"
-            
-        except Exception as e:
-            return False, f"Error reading Moltbot config: {e}"
+
+        except (OSError, json.JSONDecodeError) as e:
+            return False, f"Error reading gateway config: {e}"
     
     def configure_for_custosa(self, custosa_port: int, upstream_port: int) -> bool:
         """
@@ -330,11 +330,11 @@ class MoltbotDetector:
             
             logger.info(f"Configured Moltbot: gateway port {self.original_port} -> {upstream_port}")
             logger.info(f"Clients should connect to Custosa on port {custosa_port}")
-            
+
             return True
-            
-        except Exception as e:
-            logger.error(f"Failed to configure Moltbot: {e}")
+
+        except (OSError, shutil.Error) as e:
+            logger.error(f"Failed to configure gateway: {e}")
             return False
     
     def restore_original(self) -> bool:
