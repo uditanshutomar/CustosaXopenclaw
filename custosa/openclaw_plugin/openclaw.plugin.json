@@ -1,0 +1,48 @@
+{
+  "id": "custosa-guard",
+  "name": "Custosa Guard",
+  "version": "1.2.1",
+  "description": "Prompt injection protection for OpenClaw gateway",
+  "entry": "index.js",
+  "hooks": [
+    "before_agent_start",
+    "before_tool_call",
+    "after_tool_call"
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "custosaUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:18789/custosa/policy",
+        "description": "Custosa policy endpoint URL"
+      },
+      "token": {
+        "type": "string",
+        "default": "",
+        "description": "Shared authentication token"
+      },
+      "checkToolCalls": {
+        "type": "boolean",
+        "default": true,
+        "description": "Validate tool invocations before execution"
+      },
+      "checkToolOutputs": {
+        "type": "boolean",
+        "default": true,
+        "description": "Scan tool outputs for instruction laundering"
+      },
+      "holdMode": {
+        "type": "string",
+        "default": "block",
+        "description": "Action when policy returns HOLD"
+      },
+      "failMode": {
+        "type": "string",
+        "default": "block",
+        "description": "Action when policy check fails"
+      }
+    }
+  }
+}
