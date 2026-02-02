@@ -1,0 +1,82 @@
+{
+  "id": "custosa-guard",
+  "name": "Custosa Guard",
+  "version": "1.1.0",
+  "description": "Comprehensive prompt injection protection via Custosa policy endpoint. Intercepts agent prompts, tool calls, and tool outputs.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "custosaUrl": {
+        "type": "string",
+        "minLength": 1,
+        "title": "Custosa Policy URL",
+        "description": "URL of the Custosa /custosa/policy endpoint"
+      },
+      "token": {
+        "type": "string",
+        "minLength": 1,
+        "title": "Custosa Policy Token",
+        "description": "Shared authentication token for policy requests"
+      },
+      "timeoutMs": {
+        "type": "number",
+        "minimum": 100,
+        "maximum": 10000,
+        "default": 2000,
+        "title": "Policy Request Timeout (ms)"
+      },
+      "cacheTtlMs": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 600000,
+        "default": 15000,
+        "title": "Decision Cache TTL (ms)"
+      },
+      "maxContentChars": {
+        "type": "number",
+        "minimum": 1000,
+        "maximum": 100000,
+        "default": 20000,
+        "title": "Max Content Characters"
+      },
+      "holdMode": {
+        "type": "string",
+        "enum": ["block", "allow"],
+        "default": "block",
+        "title": "Behavior on HOLD",
+        "description": "Whether to block or allow when Custosa returns HOLD decision"
+      },
+      "failMode": {
+        "type": "string",
+        "enum": ["block", "allow"],
+        "default": "block",
+        "title": "Behavior on Custosa Error",
+        "description": "Whether to block or allow when Custosa is unavailable"
+      },
+      "includeReason": {
+        "type": "boolean",
+        "default": true,
+        "title": "Include Reason in Guard Prompt"
+      },
+      "checkToolCalls": {
+        "type": "boolean",
+        "default": true,
+        "title": "Check Tool Calls",
+        "description": "Enable before_tool_call hook to validate tool invocations"
+      },
+      "checkToolOutputs": {
+        "type": "boolean",
+        "default": true,
+        "title": "Check Tool Outputs",
+        "description": "Enable after_tool_call hook to detect instruction laundering in outputs"
+      },
+      "blockReplyText": {
+        "type": "string",
+        "default": "Your message was blocked by security policy. Please rephrase or wait for approval.",
+        "title": "Block Reply Text"
+      }
+    },
+    "required": ["custosaUrl", "token"]
+  }
+}
