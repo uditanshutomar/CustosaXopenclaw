@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "custosa"
-version = "1.2.0-dev"
+version = "1.2.0"
 description = "Prompt Injection Protection for Moltbot"
 readme = "README.md"
 license = {text = "Proprietary"}
