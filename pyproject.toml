@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "custosa"
-version = "1.1.0"
+version = "1.2.0-dev"
 description = "Prompt Injection Protection for Moltbot"
 readme = "README.md"
 license = {text = "Proprietary"}
@@ -70,6 +70,9 @@ Issues = "https://github.com/uditanshutomar/CustosaXopenclaw/issues"
 where = ["."]
 include = ["custosa*"]
 exclude = []
+
+[tool.setuptools.package-data]
+custosa = ["openclaw_plugin/*.js", "openclaw_plugin/*.json"]
 
 [tool.black]
 line-length = 100

@@ -20,6 +20,9 @@ import subprocess
 import webbrowser
 from urllib.parse import quote
 import shutil
+import secrets
+import textwrap
+from importlib import resources
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Optional, Tuple
@@ -63,6 +66,9 @@ class CustosaConfig:
     # Timeout settings
     hold_timeout_seconds: float = 300.0
     default_on_timeout: str = "block"  # "block" or "allow"
+
+    # Gateway hook policy token (for OpenClaw plugin integration)
+    policy_token: str = ""
 
     # Auto-update
     auto_update: bool = True
@@ -177,6 +183,20 @@ class CustosaConfig:
         if not path.exists():
             logger.info(f"Config file not found at {path}, using defaults")
             return cls()
+
+        # SECURITY: Check file permissions (should be 0o600 - owner read/write only)
+        import stat
+        try:
+            file_mode = path.stat().st_mode
+            # Check if group or others have any permissions
+            if file_mode & (stat.S_IRWXG | stat.S_IRWXO):
+                logger.warning(
+                    f"SECURITY WARNING: Config file {path} has insecure permissions "
+                    f"(mode {oct(file_mode)}). Should be 0o600. "
+                    "Run: chmod 600 %s", path
+                )
+        except OSError as e:
+            logger.warning(f"Could not check permissions on {path}: {e}")
 
         with open(path) as f:
             data = json.load(f)
@@ -968,6 +988,207 @@ def _start_openclaw_gateway() -> bool:
     return ok
 
 
+def _install_openclaw_guard_plugin(config: CustosaConfig, config_path: Optional[Path]) -> bool:
+    """Install the Custosa OpenClaw guard plugin and configure it."""
+    if not config_path or not config_path.exists():
+        logger.warning("OpenClaw config not found; skipping guard plugin install")
+        return False
+
+    try:
+        plugin_src = resources.files("custosa.openclaw_plugin")
+        plugin_dir = Path.home() / ".openclaw" / "extensions" / "custosa-guard"
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+
+        for filename in ("index.js", "openclaw.plugin.json"):
+            data = (plugin_src / filename).read_bytes()
+            (plugin_dir / filename).write_bytes(data)
+
+        # Update OpenClaw config with plugin settings
+        with open(config_path) as f:
+            gateway_config = json.load(f)
+
+        plugins = gateway_config.setdefault("plugins", {})
+        entries = plugins.setdefault("entries", {})
+        entry = entries.setdefault("custosa-guard", {})
+        entry["enabled"] = True
+        entry_config = entry.setdefault("config", {})
+        http_port = config.http_listen_port or config.listen_port
+        entry_config["custosaUrl"] = f"http://127.0.0.1:{http_port}/custosa/policy"
+        entry_config["token"] = config.policy_token
+
+        if plugins.get("enabled") is False:
+            logger.warning("OpenClaw plugins are disabled; custosa-guard will not load")
+
+        with open(config_path, "w") as f:
+            json.dump(gateway_config, f, indent=2)
+
+        logger.info("Installed OpenClaw guard plugin: %s", plugin_dir)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to install OpenClaw guard plugin: %s", exc)
+        return False
+
+
+def _patch_openclaw_dispatch_for_custosa(cli_path: Optional[str]) -> bool:
+    """Patch OpenClaw dispatch pipeline to hard-block based on Custosa policy."""
+    if not cli_path:
+        logger.warning("OpenClaw CLI not found; skipping dispatch patch")
+        return False
+
+    try:
+        resolved = Path(cli_path).resolve()
+        root = resolved.parent
+        target = root / "dist" / "auto-reply" / "reply" / "dispatch-from-config.js"
+        if not target.exists():
+            logger.warning("OpenClaw dispatch file not found: %s", target)
+            return False
+
+        data = target.read_text()
+        if "CUSTOSA_POLICY_GUARD_BEGIN" in data or "CUSTOSA_POLICY_CHECK_BEGIN" in data:
+            logger.info("OpenClaw dispatch already patched")
+            return True
+
+        header_snippet = textwrap.dedent(
+            """
+            // CUSTOSA_POLICY_GUARD_BEGIN
+            const CUSTOSA_DEFAULT_TIMEOUT_MS = 2000;
+            const CUSTOSA_MAX_BODY_CHARS = 20000;
+            const CUSTOSA_DEFAULT_BLOCK_REPLY = "Your message was blocked by security policy. Please rephrase or wait for approval.";
+            const resolveCustosaGuardConfig = (cfg) => {
+                const entry = cfg?.plugins?.entries?.["custosa-guard"]?.config ?? {};
+                const custosaUrl = typeof entry.custosaUrl === "string" ? entry.custosaUrl.trim() : "";
+                const token = typeof entry.token === "string" ? entry.token.trim() : "";
+                const timeoutMs = typeof entry.timeoutMs === "number" ? entry.timeoutMs : CUSTOSA_DEFAULT_TIMEOUT_MS;
+                const holdMode = entry.holdMode === "allow" ? "allow" : "block";
+                const failMode = entry.failMode === "allow" ? "allow" : "block";
+                const maxContentChars = typeof entry.maxContentChars === "number" ? entry.maxContentChars : CUSTOSA_MAX_BODY_CHARS;
+                const blockReplyText = typeof entry.blockReplyText === "string"
+                    ? entry.blockReplyText
+                    : CUSTOSA_DEFAULT_BLOCK_REPLY;
+                return { custosaUrl, token, timeoutMs, holdMode, failMode, maxContentChars, blockReplyText };
+            };
+            const extractInboundContent = (ctx) => {
+                if (typeof ctx.BodyForCommands === "string")
+                    return ctx.BodyForCommands;
+                if (typeof ctx.RawBody === "string")
+                    return ctx.RawBody;
+                if (typeof ctx.Body === "string")
+                    return ctx.Body;
+                return "";
+            };
+            async function custosaPolicyCheck(ctx, cfg) {
+                const guardCfg = resolveCustosaGuardConfig(cfg);
+                if (!guardCfg.custosaUrl)
+                    return null;
+                const content = extractInboundContent(ctx);
+                if (!content || !content.trim()) {
+                    return { decision: "allow", reason: "empty", replyText: guardCfg.blockReplyText };
+                }
+                const truncated = content.slice(0, guardCfg.maxContentChars);
+                const payload = {
+                    source: "channel_message",
+                    content: truncated,
+                    sessionKey: ctx.SessionKey,
+                    channel: ctx.Surface ?? ctx.Provider,
+                    from: ctx.From ?? "",
+                };
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), guardCfg.timeoutMs);
+                try {
+                    const res = await fetch(guardCfg.custosaUrl, {
+                        method: "POST",
+                        headers: {
+                            "content-type": "application/json",
+                            ...(guardCfg.token ? { authorization: `Bearer ${guardCfg.token}` } : {}),
+                        },
+                        body: JSON.stringify(payload),
+                        signal: controller.signal,
+                    });
+                    if (!res.ok) {
+                        throw new Error(`status ${res.status}`);
+                    }
+                    const data = await res.json();
+                    let decision = typeof data.decision === "string" ? data.decision : "allow";
+                    if (decision === "hold" && guardCfg.holdMode === "allow") {
+                        decision = "allow";
+                    } else if (decision === "hold" && guardCfg.holdMode === "block") {
+                        decision = "block";
+                    }
+                    const reason = typeof data.reason === "string" ? data.reason : "";
+                    return { decision, reason, replyText: guardCfg.blockReplyText };
+                } catch (_err) {
+                    if (guardCfg.failMode === "allow") {
+                        return { decision: "allow", reason: "custosa_unavailable", replyText: guardCfg.blockReplyText };
+                    }
+                    return { decision: "block", reason: "custosa_unavailable", replyText: guardCfg.blockReplyText };
+                } finally {
+                    clearTimeout(timeout);
+                }
+            }
+            // CUSTOSA_POLICY_GUARD_END
+            """
+        ).strip()
+
+        block_snippet = textwrap.dedent(
+            """
+                // CUSTOSA_POLICY_CHECK_BEGIN
+                const custosaDecision = await custosaPolicyCheck(ctx, cfg);
+                if (custosaDecision && custosaDecision.decision !== "allow") {
+                    const payload = { text: custosaDecision.replyText || CUSTOSA_DEFAULT_BLOCK_REPLY };
+                    let queuedFinal = false;
+                    let routedFinalCount = 0;
+                    if (shouldRouteToOriginating && originatingChannel && originatingTo) {
+                        const result = await routeReply({
+                            payload,
+                            channel: originatingChannel,
+                            to: originatingTo,
+                            sessionKey: ctx.SessionKey,
+                            accountId: ctx.AccountId,
+                            threadId: ctx.MessageThreadId,
+                            cfg,
+                        });
+                        queuedFinal = result.ok;
+                        if (result.ok)
+                            routedFinalCount += 1;
+                        if (!result.ok) {
+                            logVerbose(`dispatch-from-config: route-reply (custosa block) failed: ${result.error ?? "unknown error"}`);
+                        }
+                    } else {
+                        queuedFinal = dispatcher.sendFinalReply(payload);
+                    }
+                    await dispatcher.waitForIdle();
+                    const counts = dispatcher.getQueuedCounts();
+                    counts.final += routedFinalCount;
+                    recordProcessed("blocked", { reason: custosaDecision.reason || "custosa_policy" });
+                    markIdle("message_blocked");
+                    return { queuedFinal, counts };
+                }
+                // CUSTOSA_POLICY_CHECK_END
+            """
+        ).strip("\n")
+
+        insert_after = "const AUDIO_HEADER_RE = /^\\[Audio\\b/i;"
+        if insert_after not in data:
+            logger.warning("OpenClaw dispatch format changed; patch not applied")
+            return False
+
+        data = data.replace(insert_after, f"{insert_after}\n{header_snippet}\n")
+
+        marker = "    markProcessing();"
+        if marker not in data:
+            logger.warning("OpenClaw dispatch format changed; patch not applied")
+            return False
+
+        data = data.replace(marker, f"{marker}\n{block_snippet}\n")
+
+        target.write_text(data)
+        logger.info("Patched OpenClaw dispatch for Custosa policy checks: %s", target)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to patch OpenClaw dispatch: %s", exc)
+        return False
+
+
 def _restart_custosa_service() -> bool:
     if sys.platform == "darwin":
         domain = f"gui/{os.getuid()}"
@@ -1292,6 +1513,11 @@ def run_installer(reconfigure_telegram: bool = False):
         config = CustosaConfig()
         config.save()
         print(f"✅ Configuration saved to {CUSTOSA_CONFIG}")
+
+    # Ensure policy token exists for OpenClaw guard integration
+    if not config.policy_token:
+        config.policy_token = secrets.token_hex(24)
+        config.save()
     
     # Step 3: Configure Moltbot
     print("\n[3/5] Configuring Moltbot to use Custosa...")
@@ -1302,6 +1528,14 @@ def run_installer(reconfigure_telegram: bool = False):
         print("✅ Moltbot configured")
         print(f"   • Custosa listens on port {config.listen_port}")
         print(f"   • Moltbot moved to port {config.upstream_port}")
+        if _install_openclaw_guard_plugin(config, detector.config_path):
+            print("✅ OpenClaw guard plugin installed")
+        else:
+            print("⚠️  OpenClaw guard plugin not installed")
+        if _patch_openclaw_dispatch_for_custosa(detector.cli_path):
+            print("✅ OpenClaw dispatch patched for Custosa policy")
+        else:
+            print("⚠️  OpenClaw dispatch patch not applied")
         if _start_openclaw_gateway():
             print("✅ OpenClaw gateway service started")
         else:

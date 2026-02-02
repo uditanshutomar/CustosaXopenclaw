@@ -68,6 +68,7 @@ The installer will:
 2. Present GUI for Telegram bot credentials
 3. Auto-configure Moltbot to route through Custosa
 4. Install background service (launchd/systemd)
+5. Install the OpenClaw guard plugin for channel inputs
 
 ---
 
@@ -164,6 +165,7 @@ Configuration is stored in `~/.custosa/config.json`:
   "telegram_chat_id": "...",
   "hold_timeout_seconds": 300.0,
   "default_on_timeout": "block",
+  "policy_token": "",
   "auto_update": true,
   "discovery_log_path": "",
   "discovery_log_sample_rate": 1.0
@@ -180,9 +182,36 @@ Configuration is stored in `~/.custosa/config.json`:
 | `hold_threshold` | 0.7 | Confidence threshold for Telegram approval |
 | `hold_timeout_seconds` | 300 | Timeout for Telegram approval (5 minutes) |
 | `default_on_timeout` | "block" | Action when approval times out ("block" or "allow") |
+| `policy_token` | "" | Shared token for OpenClaw guard plugin → Custosa policy checks |
 | `auto_update` | true | Check for updates automatically |
 | `discovery_log_path` | "" | Path to discovery log (JSONL format, empty = disabled) |
 | `discovery_log_sample_rate` | 1.0 | Sampling rate for discovery logging (0.0-1.0) |
+
+### OpenClaw Guard Plugin
+
+Custosa installs a comprehensive OpenClaw plugin that provides gateway-level protection via three hooks:
+
+| Hook | Purpose | Behavior |
+|------|---------|----------|
+| `before_agent_start` | Analyze user prompts | Prepends guard context if flagged |
+| `before_tool_call` | Validate tool invocations | Blocks critical/high-risk tools |
+| `after_tool_call` | Detect instruction laundering | Warns on suspicious tool outputs |
+
+This adds guardrails for gateway-internal channels (WhatsApp, etc.) that don't traverse the Custosa proxy directly.
+
+**Plugin Configuration** (auto-configured during install):
+```json
+{
+  "custosaUrl": "http://127.0.0.1:18789/custosa/policy",
+  "token": "<policy_token>",
+  "checkToolCalls": true,
+  "checkToolOutputs": true,
+  "holdMode": "block",
+  "failMode": "block"
+}
+```
+
+Custosa also patches the OpenClaw channel dispatch pipeline to hard‑block messages when the policy endpoint returns BLOCK (or HOLD by policy). Re‑run `custosa install` after OpenClaw updates to reapply the patch.
 
 ---
 
@@ -304,18 +333,39 @@ custosa serve --mock-telegram
 - [x] Auto-configuration of Moltbot
 - [x] macOS/Linux service installation
 
-### v1.1 (Current)
+### v1.1
 - [x] Unicode homoglyph normalization
 - [x] Tool risk classification (auto-HOLD critical tools)
 - [x] Discovery logging for traffic analysis
 - [x] Auto-update checking
 - [x] Retro 8-bit Telegram setup GUI
 
-### v1.2 (Planned)
+### v1.2 (Current)
+- [x] **Security Hardening**
+  - [x] Cryptographically secure request IDs (secrets.token_hex)
+  - [x] JSON depth limits to prevent DoS
+  - [x] HTTP rate limiting (100 req/min per client)
+  - [x] Content-Type validation for JSON endpoints
+  - [x] Path traversal protection for discovery logs
+  - [x] Config file permissions validation
+  - [x] Sensitive data redaction in logs
+- [x] **Advanced Detection**
+  - [x] Role escalation detection (blocks client-injected roles)
+  - [x] Provenance-aware text extraction with weighted confidence
+  - [x] Instruction laundering detection in tool outputs
+  - [x] Tool argument validation (SSRF, path traversal, shell injection)
+  - [x] Dangerous RPC method detection (config.*, allowlist.*, etc.)
+- [x] **Gateway-Level Hooks (OpenClaw Plugin)**
+  - [x] `before_agent_start` - User prompt analysis
+  - [x] `before_tool_call` - Tool invocation validation
+  - [x] `after_tool_call` - Output instruction laundering detection
+- [x] Response/output filtering (gateway → client)
+- [x] Session-aware context analysis (multi-message attack detection)
+- [x] Comprehensive audit logging for approvals
+
+### v1.3 (Planned)
 - [ ] ML classifier with fine-tuned DeBERTa model
 - [ ] Slash command interception (`/exec`, `/bash`)
-- [ ] Response/output filtering (gateway → client)
-- [ ] Session-aware context analysis
 
 ### v2.0 (Future)
 - [ ] Web dashboard for monitoring
@@ -328,25 +378,39 @@ custosa serve --mock-telegram
 
 ## Known Limitations
 
-Current version (v1.1) has the following limitations:
+Current version (v1.2) has the following limitations:
 
 | Limitation | Impact | Planned Fix |
 |------------|--------|-------------|
-| **Input-only filtering** | Gateway responses not analyzed | v1.2 |
-| **No slash command detection** | `/exec`, `/bash` bypass detection | v1.2 |
-| **No session context** | Multi-message attacks may evade | v1.2 |
+| **No slash command detection** | `/exec`, `/bash` bypass detection | v1.3 |
 | **Single policy** | All agents share same thresholds | v2.0 |
 | **No config RPC protection** | `config.apply` can modify settings | v2.0 |
+| **Direct gateway access** | Bypass if upstream port exposed | Firewall config |
+
+**Resolved in v1.2:**
+- ~~Input-only filtering~~ → Now analyzes tool outputs via `after_tool_call` hook
+- ~~No session context~~ → Session-aware context analysis implemented
 
 ### What Custosa Analyzes
+
+**Proxy Layer (external traffic):**
 
 | Traffic Type | Analyzed | Notes |
 |--------------|----------|-------|
 | WebSocket client → gateway | ✅ Yes | All `agent`, `send`, `chat.*`, `tools.*` methods |
-| WebSocket gateway → client | ❌ No | Pass-through only |
-| HTTP `/tools/invoke` | ✅ Yes | Tool name + arguments |
+| WebSocket gateway → client | ✅ Yes | Output filtering via instruction laundering detection |
+| HTTP `/tools/invoke` | ✅ Yes | Tool name + arguments + SSRF/injection validation |
+| HTTP `/v1/*` (OpenAI API) | ✅ Yes | Content analysis with role escalation detection |
 | HTTP other endpoints | ❌ No | Proxied without inspection |
 | `connect` handshake | ❌ No | Auth tokens passed through |
+
+**Gateway Layer (internal traffic via OpenClaw plugin):**
+
+| Hook | Analyzed | Notes |
+|------|----------|-------|
+| `before_agent_start` | ✅ Yes | User prompts from all channels |
+| `before_tool_call` | ✅ Yes | Tool name, risk level, arguments |
+| `after_tool_call` | ✅ Yes | Tool outputs for instruction laundering |
 
 ---
 

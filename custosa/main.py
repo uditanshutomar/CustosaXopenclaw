@@ -108,7 +108,17 @@ def cmd_serve(args):
             path = Path(raw_path)
             if not path.is_absolute():
                 path = CUSTOSA_DIR / path
-            discovery_path = path
+            # SECURITY: Prevent path traversal attacks
+            resolved_path = path.resolve()
+            custosa_dir_resolved = CUSTOSA_DIR.resolve()
+            if not str(resolved_path).startswith(str(custosa_dir_resolved)):
+                logger.error(
+                    f"Security: discovery_log_path must be within {CUSTOSA_DIR}, "
+                    f"got {resolved_path}. Ignoring configured path."
+                )
+                discovery_path = None
+            else:
+                discovery_path = resolved_path
 
     proxy_config = ProxyConfig(
         listen_host=config.listen_host,
@@ -121,6 +131,7 @@ def cmd_serve(args):
         discovery_log_path=discovery_path,
         discovery_log_preview_chars=getattr(config, "discovery_log_preview_chars", 200),
         discovery_log_sample_rate=getattr(config, "discovery_log_sample_rate", 1.0),
+        policy_token=getattr(config, "policy_token", ""),
     )
     
     # Create detection engine
@@ -197,7 +208,13 @@ def cmd_status(args):
     
     # Check Telegram
     if config.telegram_bot_token:
-        print(f"✅ Telegram: configured (chat_id: {config.telegram_chat_id})")
+        # Redact chat_id for privacy
+        chat_id_str = str(config.telegram_chat_id)
+        if len(chat_id_str) > 6:
+            redacted_id = f"{chat_id_str[:3]}***{chat_id_str[-3:]}"
+        else:
+            redacted_id = f"***{chat_id_str[-3:]}"
+        print(f"✅ Telegram: configured (chat_id: {redacted_id})")
     else:
         print("⚠️  Telegram: not configured")
     

@@ -56,6 +56,33 @@ class AlertLevel(Enum):
     CRITICAL = "🔴"
 
 
+def _redact_sensitive(value: str, visible_chars: int = 4) -> str:
+    """Redact sensitive data, showing only first N characters."""
+    if not value:
+        return "(empty)"
+    if len(value) <= visible_chars * 2:
+        return "*" * len(value)
+    return f"{value[:visible_chars]}...{value[-visible_chars:]}"
+
+
+def _redact_chat_id(chat_id: str | int) -> str:
+    """Redact chat ID for logging."""
+    s = str(chat_id)
+    if len(s) <= 6:
+        return f"***{s[-3:]}"
+    return f"{s[:3]}***{s[-3:]}"
+
+
+def _redact_token(token: str) -> str:
+    """Redact bot token for logging."""
+    if not token:
+        return "(empty)"
+    parts = token.split(":")
+    if len(parts) == 2:
+        return f"{parts[0][:4]}***:***{parts[1][-4:]}"
+    return f"{token[:4]}***{token[-4:]}"
+
+
 @dataclass
 class ApprovalRequest:
     """Pending approval request"""
@@ -101,7 +128,7 @@ class TelegramApprovalBot:
         # Rate limiting
         self._message_timestamps: list = []
         
-        logger.info(f"Telegram bot initialized for chat_id: {config.chat_id}")
+        logger.info(f"Telegram bot initialized for chat_id: {_redact_chat_id(config.chat_id)}")
     
     @property
     def on_decision(self) -> Optional[Callable[[str, bool], Awaitable[None]]]:

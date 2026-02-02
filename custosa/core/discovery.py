@@ -1,5 +1,6 @@
 import asyncio
 import json
+import secrets
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,5 +63,6 @@ class DiscoverySampler:
             return True
         if self._rate <= 0.0:
             return False
-        # Fast deterministic sampler based on time ns
-        return (time.time_ns() % 10000) < int(self._rate * 10000)
+        # SECURITY: Use cryptographically secure random for unpredictable sampling
+        # Prevents attackers from timing requests to evade logging
+        return secrets.randbelow(10000) < int(self._rate * 10000)
