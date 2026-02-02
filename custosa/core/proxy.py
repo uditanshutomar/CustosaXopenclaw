@@ -961,12 +961,12 @@ class CustosaProxy:
             )
 
         # Validate tool arguments for common attack patterns
-        arg_issues = self._validate_tool_arguments(tool_name, args)
+        arg_issues, confidence_boost, hard_block = self._validate_tool_arguments(tool_name, args)
         if arg_issues:
             patterns.extend(arg_issues)
             return DetectionResult(
-                decision=Decision.HOLD,
-                confidence=0.9,
+                decision=Decision.BLOCK if hard_block else Decision.HOLD,
+                confidence=min(0.95, 0.7 + confidence_boost),
                 reason=f"Suspicious tool arguments: {', '.join(arg_issues[:3])}",
                 patterns_matched=patterns,
             )
@@ -999,13 +999,13 @@ class CustosaProxy:
             )
 
         # Check for instruction laundering patterns in output
-        laundering_result = self._detect_instruction_laundering(output)
-        if laundering_result:
+        is_laundering, laundering_reason = self._detect_instruction_laundering(output)
+        if is_laundering:
             return DetectionResult(
                 decision=Decision.HOLD,
-                confidence=laundering_result["confidence"],
-                reason=f"Instruction laundering in {tool_name} output: {laundering_result['reason']}",
-                patterns_matched=laundering_result["patterns"],
+                confidence=0.85,
+                reason=f"Instruction laundering in {tool_name} output: {laundering_reason}",
+                patterns_matched=[f"instruction_laundering:{laundering_reason}"],
             )
 
         # Run standard detection on output
