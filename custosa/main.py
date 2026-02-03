@@ -392,13 +392,13 @@ def cmd_uninstall(args):
             return
     
     # Stop service
-    print("\n[1/4] Stopping service...")
+    print("\n[1/5] Stopping service...")
     service_mgr = ServiceManager()
     service_mgr.uninstall()
     print("✅ Service stopped")
 
     # Restore Moltbot config
-    print("\n[2/4] Restoring Moltbot configuration...")
+    print("\n[2/5] Restoring Moltbot configuration...")
     detector = MoltbotDetector()
     if detector.restore_original():
         print("✅ Moltbot configuration restored")
@@ -406,7 +406,7 @@ def cmd_uninstall(args):
         print("⚠️  No backup found - Moltbot config unchanged")
     
     # Remove Custosa config
-    print("\n[3/4] Removing Custosa configuration...")
+    print("\n[3/5] Removing Custosa configuration...")
     import shutil
     if CUSTOSA_DIR.exists():
         shutil.rmtree(CUSTOSA_DIR)
@@ -418,9 +418,10 @@ def cmd_uninstall(args):
         shutil.rmtree(plugin_dir)
         print(f"✅ Removed OpenClaw plugin")
 
-    # Offer to uninstall Homebrew package
-    print("\n[4/4] Removing Homebrew package...")
+    # Offer to uninstall Homebrew package and untap
+    print("\n[4/5] Removing Homebrew package...")
     import subprocess
+    brew_removed = False
     try:
         # Check if installed via Homebrew
         result = subprocess.run(["brew", "list", "custosa"], capture_output=True, text=True)
@@ -428,19 +429,44 @@ def cmd_uninstall(args):
             if args.yes:
                 subprocess.run(["brew", "uninstall", "custosa"], check=True)
                 print("✅ Homebrew package removed")
+                brew_removed = True
             else:
                 remove_brew = input("Remove Homebrew package? [Y/n] ")
                 if remove_brew.lower() != 'n':
                     subprocess.run(["brew", "uninstall", "custosa"], check=True)
                     print("✅ Homebrew package removed")
+                    brew_removed = True
                 else:
                     print("⚠️  Homebrew package kept - run 'brew uninstall custosa' to remove")
         else:
             print("✅ Not installed via Homebrew")
+            brew_removed = True  # Allow untap even if package wasn't installed
     except FileNotFoundError:
         print("⚠️  Homebrew not found - package may still be installed")
     except Exception as e:
         print(f"⚠️  Could not remove Homebrew package: {e}")
+
+    # Offer to untap Homebrew repository
+    print("\n[5/5] Removing Homebrew tap...")
+    try:
+        result = subprocess.run(["brew", "tap"], capture_output=True, text=True)
+        if "uditanshutomar/custosaxopenclaw" in result.stdout:
+            if args.yes or brew_removed:
+                subprocess.run(["brew", "untap", "uditanshutomar/custosaxopenclaw"], check=True)
+                print("✅ Homebrew tap removed")
+            else:
+                remove_tap = input("Remove Homebrew tap? [Y/n] ")
+                if remove_tap.lower() != 'n':
+                    subprocess.run(["brew", "untap", "uditanshutomar/custosaxopenclaw"], check=True)
+                    print("✅ Homebrew tap removed")
+                else:
+                    print("⚠️  Tap kept - run 'brew untap uditanshutomar/custosaxopenclaw' to remove")
+        else:
+            print("✅ Tap not installed")
+    except FileNotFoundError:
+        pass  # Homebrew not found, already warned above
+    except Exception as e:
+        print(f"⚠️  Could not remove tap: {e}")
 
     print("\n✅ Custosa has been uninstalled")
     print("   Moltbot is now running without protection")
