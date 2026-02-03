@@ -391,13 +391,13 @@ def cmd_uninstall(args):
             return
     
     # Stop service
-    print("\n[1/3] Stopping service...")
+    print("\n[1/4] Stopping service...")
     service_mgr = ServiceManager()
     service_mgr.uninstall()
     print("✅ Service stopped")
-    
+
     # Restore Moltbot config
-    print("\n[2/3] Restoring Moltbot configuration...")
+    print("\n[2/4] Restoring Moltbot configuration...")
     detector = MoltbotDetector()
     if detector.restore_original():
         print("✅ Moltbot configuration restored")
@@ -405,12 +405,42 @@ def cmd_uninstall(args):
         print("⚠️  No backup found - Moltbot config unchanged")
     
     # Remove Custosa config
-    print("\n[3/3] Removing Custosa configuration...")
+    print("\n[3/4] Removing Custosa configuration...")
     import shutil
     if CUSTOSA_DIR.exists():
         shutil.rmtree(CUSTOSA_DIR)
         print(f"✅ Removed {CUSTOSA_DIR}")
-    
+
+    # Remove OpenClaw plugin
+    plugin_dir = Path.home() / ".openclaw" / "extensions" / "custosa-guard"
+    if plugin_dir.exists():
+        shutil.rmtree(plugin_dir)
+        print(f"✅ Removed OpenClaw plugin")
+
+    # Offer to uninstall Homebrew package
+    print("\n[4/4] Removing Homebrew package...")
+    import subprocess
+    try:
+        # Check if installed via Homebrew
+        result = subprocess.run(["brew", "list", "custosa"], capture_output=True, text=True)
+        if result.returncode == 0:
+            if args.yes:
+                subprocess.run(["brew", "uninstall", "custosa"], check=True)
+                print("✅ Homebrew package removed")
+            else:
+                remove_brew = input("Remove Homebrew package? [Y/n] ")
+                if remove_brew.lower() != 'n':
+                    subprocess.run(["brew", "uninstall", "custosa"], check=True)
+                    print("✅ Homebrew package removed")
+                else:
+                    print("⚠️  Homebrew package kept - run 'brew uninstall custosa' to remove")
+        else:
+            print("✅ Not installed via Homebrew")
+    except FileNotFoundError:
+        print("⚠️  Homebrew not found - package may still be installed")
+    except Exception as e:
+        print(f"⚠️  Could not remove Homebrew package: {e}")
+
     print("\n✅ Custosa has been uninstalled")
     print("   Moltbot is now running without protection")
     print()
