@@ -32,7 +32,8 @@ logger = logging.getLogger("custosa.installer")
 # Paths
 CUSTOSA_DIR = Path.home() / ".custosa"
 CUSTOSA_CONFIG = CUSTOSA_DIR / "config.json"
-OPENCLAW_CONFIG = Path.home() / ".openclaw" / "moltbot.json"
+OPENCLAW_CONFIG = Path.home() / ".openclaw" / "openclaw.json"
+OPENCLAW_LEGACY_CONFIG = Path.home() / ".openclaw" / "moltbot.json"
 CLAWDBOT_CONFIG = Path.home() / ".clawdbot" / "clawdbot.json"
 MOLTBOT_CONFIG = Path.home() / ".clawdbot" / "moltbot.json"
 LAUNCHD_PLIST = Path.home() / "Library" / "LaunchAgents" / "com.custosa.proxy.plist"
@@ -229,7 +230,7 @@ class MoltbotDetector:
     
     def __init__(self):
         self.config_path: Optional[Path] = None
-        self._config_candidates = [OPENCLAW_CONFIG, MOLTBOT_CONFIG, CLAWDBOT_CONFIG]
+        self._config_candidates = [OPENCLAW_CONFIG, OPENCLAW_LEGACY_CONFIG, MOLTBOT_CONFIG, CLAWDBOT_CONFIG]
         self.original_port: Optional[int] = None
         self.cli_path: Optional[str] = None
 

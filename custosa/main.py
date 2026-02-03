@@ -244,6 +244,7 @@ def cmd_status(args):
 
 def _read_gateway_token() -> Optional[str]:
     candidates = [
+        Path.home() / ".openclaw" / "openclaw.json",
         Path.home() / ".openclaw" / "moltbot.json",
         Path.home() / ".clawdbot" / "moltbot.json",
         Path.home() / ".clawdbot" / "clawdbot.json",

@@ -1,7 +1,7 @@
 {
   "id": "custosa-guard",
   "name": "Custosa Guard",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Prompt injection protection for OpenClaw gateway",
   "entry": "index.js",
   "hooks": [
