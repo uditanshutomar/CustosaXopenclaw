@@ -62,13 +62,15 @@ check_python() {
 install_with_brew() {
     info "Installing via Homebrew..."
 
-    # Add tap if not already added
-    if ! brew tap | grep -q "uditanshutomar/custosaxopenclaw"; then
-        brew tap uditanshutomar/custosaxopenclaw
-    fi
+    # Always update/add tap to get latest formula
+    brew tap uditanshutomar/custosaxopenclaw --force
 
-    # Install custosa
-    brew install custosa
+    # Install or upgrade custosa
+    if brew list custosa &>/dev/null; then
+        brew upgrade custosa || true
+    else
+        brew install custosa
+    fi
     success "Installed via Homebrew"
 }
 
