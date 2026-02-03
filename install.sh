@@ -119,11 +119,13 @@ main() {
 
     echo ""
     echo "================================================"
-    success "Installation Complete!"
+    success "Package installed! Starting setup wizard..."
     echo "================================================"
     echo ""
-    echo "Next steps:"
-    echo "  ${GREEN}custosa install${NC}  - Run setup wizard"
+
+    # Run the setup wizard automatically
+    custosa install
+
     echo ""
     echo "Commands:"
     echo "  custosa status  - Check protection status"
