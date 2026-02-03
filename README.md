@@ -1,6 +1,6 @@
-# Custosa V1
+# Custosa v1.2
 
-**Prompt Injection Protection for Moltbot**
+**Prompt Injection Protection for OpenClaw/Moltbot**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
@@ -47,10 +47,17 @@ Custosa is a transparent WebSocket proxy that intercepts all traffic to Moltbot 
 curl -fsSL https://raw.githubusercontent.com/uditanshutomar/CustosaXopenclaw/main/install.sh | bash
 ```
 
+This single command will:
+1. Install Custosa via Homebrew (or pip as fallback)
+2. Launch the setup wizard automatically
+3. Open a GUI for Telegram bot configuration
+4. Start the protected OpenClaw dashboard
+
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew install uditanshutomar/custosaxopenclaw/custosa
+brew tap uditanshutomar/custosaxopenclaw
+brew install custosa
 custosa install
 ```
 
@@ -313,6 +320,9 @@ custosa serve --mock-telegram
 │   │   └── bot.py            # Telegram approval bot
 │   ├── installer/
 │   │   └── setup.py          # Installation wizard + GUI
+│   ├── openclaw_plugin/
+│   │   ├── index.js          # Gateway hooks (JS)
+│   │   └── openclaw.plugin.json  # Plugin manifest
 │   ├── main.py               # CLI entry point
 │   └── updater.py            # Auto-update checker
 ├── homebrew-custosaXopenclaw/
@@ -340,14 +350,22 @@ custosa serve --mock-telegram
 - [x] Auto-update checking
 - [x] Retro 8-bit Telegram setup GUI
 
-### v1.2.1 (Current)
-- [x] **OpenClaw Guard Plugin Implementation**
-  - [x] Added `index.js` with 3 gateway hooks
-  - [x] Fixed plugin manifest format (`id`, `configSchema`)
-  - [x] Auto-install both `openclaw.plugin.json` and `clawdbot.plugin.json`
-- [x] Updated Telegram setup GUI header ("CUSTOSA TELEGRAM SETUP")
+### v1.2.3 (Current)
+- [x] **Fully Automated Installation**
+  - [x] One-liner `curl | bash` runs complete setup automatically
+  - [x] Homebrew tap integration (`brew install custosa`)
+  - [x] Auto-launches Telegram setup GUI after install
+  - [x] Opens protected OpenClaw dashboard when complete
+- [x] **Improved Uninstaller**
+  - [x] Removes Homebrew package (`brew uninstall custosa`)
+  - [x] Cleans up OpenClaw plugin directory
+  - [x] 4-step cleanup process with confirmation
 
-### v1.2
+### v1.2.0-1.2.2
+- [x] **OpenClaw Guard Plugin**
+  - [x] JavaScript plugin with 3 gateway hooks (`index.js`)
+  - [x] Plugin manifest (`openclaw.plugin.json`)
+  - [x] Auto-install to `~/.openclaw/extensions/custosa-guard`
 - [x] **Security Hardening**
   - [x] Cryptographically secure request IDs (secrets.token_hex)
   - [x] JSON depth limits to prevent DoS
@@ -369,6 +387,7 @@ custosa serve --mock-telegram
 - [x] Response/output filtering (gateway → client)
 - [x] Session-aware context analysis (multi-message attack detection)
 - [x] Comprehensive audit logging for approvals
+- [x] Updated Telegram setup GUI header ("CUSTOSA TELEGRAM SETUP")
 
 ### v1.3 (Planned)
 - [ ] ML classifier with fine-tuned DeBERTa model
@@ -385,7 +404,7 @@ custosa serve --mock-telegram
 
 ## Known Limitations
 
-Current version (v1.2) has the following limitations:
+Current version (v1.2.3) has the following limitations:
 
 | Limitation | Impact | Planned Fix |
 |------------|--------|-------------|
@@ -394,9 +413,10 @@ Current version (v1.2) has the following limitations:
 | **No config RPC protection** | `config.apply` can modify settings | v2.0 |
 | **Direct gateway access** | Bypass if upstream port exposed | Firewall config |
 
-**Resolved in v1.2:**
+**Resolved in v1.2.x:**
 - ~~Input-only filtering~~ → Now analyzes tool outputs via `after_tool_call` hook
 - ~~No session context~~ → Session-aware context analysis implemented
+- ~~Manual setup required~~ → Fully automated one-liner installation
 
 ### What Custosa Analyzes
 
