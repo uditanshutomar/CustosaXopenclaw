@@ -340,7 +340,14 @@ custosa serve --mock-telegram
 - [x] Auto-update checking
 - [x] Retro 8-bit Telegram setup GUI
 
-### v1.2 (Current)
+### v1.2.1 (Current)
+- [x] **OpenClaw Guard Plugin Implementation**
+  - [x] Added `index.js` with 3 gateway hooks
+  - [x] Fixed plugin manifest format (`id`, `configSchema`)
+  - [x] Auto-install both `openclaw.plugin.json` and `clawdbot.plugin.json`
+- [x] Updated Telegram setup GUI header ("CUSTOSA TELEGRAM SETUP")
+
+### v1.2
 - [x] **Security Hardening**
   - [x] Cryptographically secure request IDs (secrets.token_hex)
   - [x] JSON depth limits to prevent DoS
