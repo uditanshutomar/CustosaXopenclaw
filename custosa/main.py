@@ -412,11 +412,32 @@ def cmd_uninstall(args):
         shutil.rmtree(CUSTOSA_DIR)
         print(f"✅ Removed {CUSTOSA_DIR}")
 
-    # Remove OpenClaw plugin
+    # Remove OpenClaw plugin files and config entry
     plugin_dir = Path.home() / ".openclaw" / "extensions" / "custosa-guard"
     if plugin_dir.exists():
         shutil.rmtree(plugin_dir)
-        print(f"✅ Removed OpenClaw plugin")
+        print("✅ Removed OpenClaw plugin files")
+
+    # Remove plugin entry from OpenClaw config
+    openclaw_configs = [
+        Path.home() / ".openclaw" / "openclaw.json",
+        Path.home() / ".openclaw" / "moltbot.json",
+        Path.home() / ".clawdbot" / "moltbot.json",
+    ]
+    for config_path in openclaw_configs:
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    config_data = json.load(f)
+                plugins = config_data.get("plugins", {})
+                entries = plugins.get("entries", {})
+                if "custosa-guard" in entries:
+                    del entries["custosa-guard"]
+                    with open(config_path, "w") as f:
+                        json.dump(config_data, f, indent=2)
+                    print(f"✅ Removed plugin config from {config_path.name}")
+            except Exception as e:
+                print(f"⚠️  Could not clean {config_path.name}: {e}")
 
     # Offer to uninstall Homebrew package and untap
     print("\n[4/5] Removing Homebrew package...")
