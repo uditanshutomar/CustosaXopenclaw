@@ -1014,7 +1014,8 @@ def _install_openclaw_guard_plugin(config: CustosaConfig, config_path: Optional[
         plugins = gateway_config.setdefault("plugins", {})
         entries = plugins.setdefault("entries", {})
         entry = entries.setdefault("custosa-guard", {})
-        entry["enabled"] = True
+        # Plugin disabled by default - OpenClaw plugin format not yet compatible
+        entry["enabled"] = False
         entry_config = entry.setdefault("config", {})
         http_port = config.http_listen_port or config.listen_port
         entry_config["custosaUrl"] = f"http://127.0.0.1:{http_port}/custosa/policy"
