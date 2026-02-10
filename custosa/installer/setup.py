@@ -53,7 +53,7 @@ class CustosaConfig:
     listen_port: int = 18789
     http_listen_port: Optional[int] = None
     upstream_host: str = "127.0.0.1"
-    upstream_port: int = 19789
+    upstream_port: int = 19789  # OpenClaw gets moved here (original port + 1000)
 
     # Detection settings
     block_threshold: float = 0.8
@@ -319,9 +319,10 @@ class MoltbotDetector:
                 shutil.copy(self.config_path, backup_path)
                 logger.info(f"Backed up original config to {backup_path}")
             
-            # Update gateway settings - clients connect to Custosa port
+            # Update gateway settings - move Moltbot to upstream port
+            # so Custosa can take over the original port
             gateway = config.setdefault("gateway", {})
-            gateway["port"] = custosa_port  # Route clients through Custosa
+            gateway["port"] = upstream_port  # Move Moltbot to upstream port
             # Ensure gateway is allowed to start locally
             if not gateway.get("mode"):
                 gateway["mode"] = "local"
@@ -1516,7 +1517,14 @@ def run_installer(reconfigure_telegram: bool = False):
             config.save()
             print(f"✅ Configuration reset to defaults at {CUSTOSA_CONFIG}")
     else:
-        config = CustosaConfig()
+        # Auto-detect OpenClaw's port and configure Custosa around it
+        detected_port = getattr(detector, 'original_port', 18789)
+        config = CustosaConfig(
+            listen_port=detected_port,
+            upstream_port=detected_port + 1000,
+        )
+        print(f"   Detected OpenClaw on port {detected_port}")
+        print(f"   Custosa will listen on :{detected_port}, OpenClaw moved to :{detected_port + 1000}")
         config.save()
         print(f"✅ Configuration saved to {CUSTOSA_CONFIG}")
 

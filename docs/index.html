@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CustosaXOpenClaw — Prompt Injection Shield</title>
+<meta name="description" content="Multi-layer prompt injection protection for AI gateways. Shield your AI from attacks with Custosa.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-dark: #0a0a12;
+  --bg-panel: #12121f;
+  --neon-green: #39ff14;
+  --neon-cyan: #00fff7;
+  --neon-magenta: #ff2d95;
+  --neon-yellow: #ffe600;
+  --neon-orange: #ff6a00;
+  --neon-red: #ff1744;
+  --text-primary: #e0e0e0;
+  --text-dim: #7a7a9a;
+  --pixel-border: 4px;
+  --font-pixel: 'Press Start 2P', monospace;
+  --font-terminal: 'VT323', monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: var(--font-terminal);
+  font-size: 20px;
+  line-height: 1.6;
+  overflow-x: hidden;
+  image-rendering: pixelated;
+}
+
+/* CRT Scanline overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Screen flicker */
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.8; }
+  94% { opacity: 1; }
+  96% { opacity: 0.9; }
+  97% { opacity: 1; }
+}
+
+body { animation: flicker 8s infinite; }
+
+/* ═══════════════════════════════════════════
+   PIXEL UTILITIES
+   ═══════════════════════════════════════════ */
+.pixel-border {
+  border: var(--pixel-border) solid var(--neon-green);
+  box-shadow:
+    inset calc(-1 * var(--pixel-border)) calc(-1 * var(--pixel-border)) 0 0 rgba(0,0,0,0.3),
+    var(--pixel-border) var(--pixel-border) 0 0 rgba(0,0,0,0.4),
+    0 0 20px rgba(57, 255, 20, 0.15);
+}
+
+.pixel-border-cyan {
+  border: var(--pixel-border) solid var(--neon-cyan);
+  box-shadow:
+    inset calc(-1 * var(--pixel-border)) calc(-1 * var(--pixel-border)) 0 0 rgba(0,0,0,0.3),
+    var(--pixel-border) var(--pixel-border) 0 0 rgba(0,0,0,0.4),
+    0 0 20px rgba(0, 255, 247, 0.15);
+}
+
+.pixel-border-magenta {
+  border: var(--pixel-border) solid var(--neon-magenta);
+  box-shadow:
+    inset calc(-1 * var(--pixel-border)) calc(-1 * var(--pixel-border)) 0 0 rgba(0,0,0,0.3),
+    var(--pixel-border) var(--pixel-border) 0 0 rgba(0,0,0,0.4),
+    0 0 20px rgba(255, 45, 149, 0.15);
+}
+
+.section-title {
+  font-family: var(--font-pixel);
+  font-size: clamp(16px, 3vw, 28px);
+  text-align: center;
+  margin-bottom: 60px;
+  position: relative;
+  display: inline-block;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.section-title::before {
+  content: '>> ';
+  color: var(--neon-magenta);
+}
+
+.section-title::after {
+  content: ' <<';
+  color: var(--neon-magenta);
+}
+
+section {
+  padding: 80px 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* ═══════════════════════════════════════════
+   PIXEL STARFIELD BACKGROUND
+   ═══════════════════════════════════════════ */
+#starfield {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.star {
+  position: absolute;
+  background: #fff;
+  width: 2px;
+  height: 2px;
+  animation: twinkle var(--dur) infinite var(--delay);
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════
+   NAVBAR
+   ═══════════════════════════════════════════ */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(10, 10, 18, 0.92);
+  backdrop-filter: blur(6px);
+  border-bottom: 3px solid var(--neon-green);
+  padding: 0 24px;
+}
+
+nav .nav-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+}
+
+nav .logo {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: var(--neon-green);
+  text-shadow: 0 0 10px rgba(57, 255, 20, 0.6);
+  text-decoration: none;
+  letter-spacing: 1px;
+}
+
+nav .logo span { color: var(--neon-cyan); }
+
+nav .nav-links {
+  display: flex;
+  gap: 28px;
+  list-style: none;
+}
+
+nav .nav-links a {
+  font-family: var(--font-terminal);
+  font-size: 20px;
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color 0.2s, text-shadow 0.2s;
+  position: relative;
+}
+
+nav .nav-links a:hover {
+  color: var(--neon-yellow);
+  text-shadow: 0 0 8px rgba(255, 230, 0, 0.5);
+}
+
+nav .nav-links a::before {
+  content: '>';
+  position: absolute;
+  left: -14px;
+  opacity: 0;
+  color: var(--neon-yellow);
+  transition: opacity 0.2s;
+}
+
+nav .nav-links a:hover::before { opacity: 1; }
+
+.mobile-toggle {
+  display: none;
+  background: none;
+  border: 2px solid var(--neon-green);
+  color: var(--neon-green);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .mobile-toggle { display: block; }
+  nav .nav-links {
+    display: none;
+    position: absolute;
+    top: 60px;
+    left: 0;
+    right: 0;
+    background: rgba(10, 10, 18, 0.97);
+    flex-direction: column;
+    padding: 20px 24px;
+    gap: 16px;
+    border-bottom: 3px solid var(--neon-green);
+  }
+  nav .nav-links.open { display: flex; }
+}
+
+/* ═══════════════════════════════════════════
+   HERO
+   ═══════════════════════════════════════════ */
+#hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-top: 80px;
+  position: relative;
+}
+
+.hero-shield {
+  width: 120px;
+  height: 140px;
+  margin-bottom: 30px;
+  position: relative;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+.hero-shield svg { width: 100%; height: 100%; }
+
+.hero-title {
+  font-family: var(--font-pixel);
+  font-size: clamp(20px, 5vw, 44px);
+  color: var(--neon-green);
+  text-shadow:
+    0 0 10px rgba(57, 255, 20, 0.5),
+    0 0 30px rgba(57, 255, 20, 0.3),
+    4px 4px 0 #001a00;
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+
+.hero-title .x-mark {
+  color: var(--neon-magenta);
+  text-shadow:
+    0 0 10px rgba(255, 45, 149, 0.5),
+    0 0 30px rgba(255, 45, 149, 0.3),
+    4px 4px 0 #1a0010;
+}
+
+.hero-subtitle {
+  font-family: var(--font-pixel);
+  font-size: clamp(8px, 1.8vw, 13px);
+  color: var(--neon-cyan);
+  text-shadow: 0 0 10px rgba(0, 255, 247, 0.4);
+  margin-bottom: 30px;
+  letter-spacing: 1px;
+}
+
+.hero-tagline {
+  font-family: var(--font-terminal);
+  font-size: clamp(22px, 3vw, 32px);
+  color: var(--text-primary);
+  max-width: 700px;
+  margin-bottom: 40px;
+  line-height: 1.4;
+}
+
+.hero-tagline em {
+  font-style: normal;
+  color: var(--neon-yellow);
+  text-shadow: 0 0 8px rgba(255, 230, 0, 0.4);
+}
+
+.hero-version {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-bottom: 40px;
+  letter-spacing: 1px;
+}
+
+.hero-version span { color: var(--neon-green); }
+
+.hero-actions {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-pixel {
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  padding: 16px 28px;
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  position: relative;
+  letter-spacing: 1px;
+}
+
+.btn-pixel:active {
+  transform: translate(3px, 3px);
+  box-shadow: none !important;
+}
+
+.btn-primary {
+  background: var(--neon-green);
+  color: #0a0a12;
+  border: none;
+  box-shadow: 4px 4px 0 #001a00, 0 0 20px rgba(57, 255, 20, 0.3);
+}
+
+.btn-primary:hover {
+  background: #5fff4a;
+  box-shadow: 4px 4px 0 #001a00, 0 0 30px rgba(57, 255, 20, 0.5);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--neon-cyan);
+  border: 3px solid var(--neon-cyan);
+  box-shadow: 4px 4px 0 rgba(0, 255, 247, 0.2);
+}
+
+.btn-secondary:hover {
+  background: rgba(0, 255, 247, 0.08);
+  box-shadow: 4px 4px 0 rgba(0, 255, 247, 0.3), 0 0 20px rgba(0, 255, 247, 0.2);
+}
+
+/* Scroll indicator */
+.scroll-hint {
+  position: absolute;
+  bottom: 30px;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--text-dim);
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(8px); }
+}
+
+.scroll-hint::after {
+  content: '';
+  display: block;
+  width: 12px;
+  height: 12px;
+  margin: 8px auto 0;
+  border-right: 3px solid var(--text-dim);
+  border-bottom: 3px solid var(--text-dim);
+  transform: rotate(45deg);
+}
+
+/* ═══════════════════════════════════════════
+   HOW IT WORKS / ARCHITECTURE
+   ═══════════════════════════════════════════ */
+#architecture .section-title { color: var(--neon-cyan); }
+
+.arch-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+}
+
+.arch-node {
+  background: var(--bg-panel);
+  padding: 20px 24px;
+  text-align: center;
+  min-width: 160px;
+}
+
+.arch-node .node-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+  display: block;
+  /* pixel-style rendering */
+  image-rendering: pixelated;
+}
+
+.arch-node .node-label {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+
+.arch-node.client-node { border-color: var(--neon-cyan); }
+.arch-node.client-node .node-label { color: var(--neon-cyan); }
+
+.arch-node.custosa-node {
+  border: var(--pixel-border) solid var(--neon-green);
+  box-shadow: 0 0 30px rgba(57, 255, 20, 0.2), var(--pixel-border) var(--pixel-border) 0 0 rgba(0,0,0,0.4);
+  transform: scale(1.1);
+  z-index: 2;
+}
+.arch-node.custosa-node .node-label { color: var(--neon-green); }
+
+.arch-node.gateway-node { border-color: var(--neon-magenta); }
+.arch-node.gateway-node .node-label { color: var(--neon-magenta); }
+
+.arch-arrow {
+  font-family: var(--font-pixel);
+  font-size: 18px;
+  color: var(--neon-yellow);
+  padding: 0 6px;
+  animation: arrowPulse 1.5s infinite;
+}
+
+@keyframes arrowPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.arch-desc {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 22px;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+.arch-desc strong {
+  color: var(--neon-green);
+  font-weight: normal;
+}
+
+/* ═══════════════════════════════════════════
+   CONFIDENCE METER
+   ═══════════════════════════════════════════ */
+#confidence {
+  padding: 60px 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+#confidence .section-title { color: var(--neon-yellow); }
+
+.meter-container {
+  background: var(--bg-panel);
+  padding: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+.meter-bar {
+  display: flex;
+  height: 48px;
+  margin-bottom: 24px;
+  position: relative;
+  border: 3px solid #2a2a40;
+}
+
+.meter-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  position: relative;
+}
+
+.meter-seg-allow {
+  width: 30%;
+  background: repeating-linear-gradient(90deg, #003300 0px, #003300 6px, #004400 6px, #004400 12px);
+  color: var(--neon-green);
+  border-right: 3px solid #2a2a40;
+}
+
+.meter-seg-log {
+  width: 40%;
+  background: repeating-linear-gradient(90deg, #332800 0px, #332800 6px, #443600 6px, #443600 12px);
+  color: var(--neon-yellow);
+  border-right: 3px solid #2a2a40;
+}
+
+.meter-seg-hold {
+  width: 20%;
+  background: repeating-linear-gradient(90deg, #331500 0px, #331500 6px, #442000 6px, #442000 12px);
+  color: var(--neon-orange);
+  border-right: 3px solid #2a2a40;
+}
+
+.meter-seg-block {
+  width: 10%;
+  background: repeating-linear-gradient(90deg, #330000 0px, #330000 6px, #440a0a 6px, #440a0a 12px);
+  color: var(--neon-red);
+}
+
+.meter-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--text-dim);
+}
+
+.meter-labels span:first-child { color: var(--neon-green); }
+.meter-labels span:last-child { color: var(--neon-red); }
+
+.meter-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 20px;
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
+.legend-dot.green { background: var(--neon-green); box-shadow: 0 0 8px rgba(57, 255, 20, 0.4); }
+.legend-dot.yellow { background: var(--neon-yellow); box-shadow: 0 0 8px rgba(255, 230, 0, 0.4); }
+.legend-dot.orange { background: var(--neon-orange); box-shadow: 0 0 8px rgba(255, 106, 0, 0.4); }
+.legend-dot.red { background: var(--neon-red); box-shadow: 0 0 8px rgba(255, 23, 68, 0.4); }
+
+.legend-item strong {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  display: block;
+  margin-bottom: 2px;
+  font-weight: normal;
+}
+
+.legend-item span {
+  color: var(--text-dim);
+  font-size: 18px;
+}
+
+/* ═══════════════════════════════════════════
+   FEATURES
+   ═══════════════════════════════════════════ */
+#features .section-title { color: var(--neon-green); }
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.feature-card {
+  background: var(--bg-panel);
+  padding: 28px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card:hover {
+  transform: translate(-3px, -3px);
+  box-shadow:
+    7px 7px 0 rgba(57, 255, 20, 0.15),
+    0 0 25px rgba(57, 255, 20, 0.1);
+}
+
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+
+.feature-card:nth-child(1)::before { background: var(--neon-green); }
+.feature-card:nth-child(2)::before { background: var(--neon-cyan); }
+.feature-card:nth-child(3)::before { background: var(--neon-magenta); }
+.feature-card:nth-child(4)::before { background: var(--neon-yellow); }
+.feature-card:nth-child(5)::before { background: var(--neon-orange); }
+.feature-card:nth-child(6)::before { background: var(--neon-red); }
+
+.feature-icon {
+  font-size: 36px;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.feature-card h3 {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.feature-card:nth-child(1) h3 { color: var(--neon-green); }
+.feature-card:nth-child(2) h3 { color: var(--neon-cyan); }
+.feature-card:nth-child(3) h3 { color: var(--neon-magenta); }
+.feature-card:nth-child(4) h3 { color: var(--neon-yellow); }
+.feature-card:nth-child(5) h3 { color: var(--neon-orange); }
+.feature-card:nth-child(6) h3 { color: var(--neon-red); }
+
+.feature-card p {
+  color: var(--text-dim);
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+/* ═══════════════════════════════════════════
+   DETECTION PATTERNS
+   ═══════════════════════════════════════════ */
+#detection .section-title { color: var(--neon-magenta); }
+
+.detection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.detect-item {
+  background: var(--bg-panel);
+  border: 2px solid #2a2a40;
+  padding: 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  transition: border-color 0.2s;
+}
+
+.detect-item:hover { border-color: var(--neon-magenta); }
+
+.detect-num {
+  font-family: var(--font-pixel);
+  font-size: 18px;
+  color: var(--neon-magenta);
+  text-shadow: 0 0 8px rgba(255, 45, 149, 0.4);
+  flex-shrink: 0;
+  width: 28px;
+}
+
+.detect-item h4 {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.detect-item p {
+  color: var(--text-dim);
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+/* ═══════════════════════════════════════════
+   INSTALL SECTION
+   ═══════════════════════════════════════════ */
+#install .section-title { color: var(--neon-yellow); }
+
+.install-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+}
+
+.tab-btn {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  padding: 14px 20px;
+  background: #1a1a2e;
+  color: var(--text-dim);
+  border: 3px solid #2a2a40;
+  border-bottom: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.tab-btn:hover { color: var(--neon-yellow); }
+
+.tab-btn.active {
+  background: var(--bg-panel);
+  color: var(--neon-yellow);
+  border-color: var(--neon-yellow);
+  text-shadow: 0 0 8px rgba(255, 230, 0, 0.4);
+  position: relative;
+  z-index: 2;
+}
+
+.tab-content {
+  background: var(--bg-panel);
+  border: 3px solid var(--neon-yellow);
+  border-top-right-radius: 0;
+  padding: 28px;
+  position: relative;
+  box-shadow: 0 0 20px rgba(255, 230, 0, 0.08);
+}
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.tab-panel h4 {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--neon-yellow);
+  margin-bottom: 16px;
+  letter-spacing: 0.5px;
+}
+
+.code-block {
+  background: #080810;
+  border: 2px solid #2a2a40;
+  padding: 20px;
+  overflow-x: auto;
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.code-block code {
+  font-family: var(--font-terminal);
+  font-size: 20px;
+  color: var(--neon-green);
+  white-space: pre;
+  line-height: 1.6;
+}
+
+.code-block .prompt { color: var(--neon-cyan); }
+.code-block .comment { color: var(--text-dim); }
+.code-block .flag { color: var(--neon-yellow); }
+
+.copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #1a1a2e;
+  border: 2px solid #2a2a40;
+  color: var(--text-dim);
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.copy-btn:hover {
+  border-color: var(--neon-green);
+  color: var(--neon-green);
+}
+
+.copy-btn.copied {
+  border-color: var(--neon-green);
+  color: var(--neon-green);
+}
+
+.tab-panel p {
+  color: var(--text-dim);
+  font-size: 18px;
+  margin-top: 8px;
+}
+
+/* ═══════════════════════════════════════════
+   CLI COMMANDS
+   ═══════════════════════════════════════════ */
+#cli .section-title { color: var(--neon-cyan); }
+
+.cli-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.cli-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg-panel);
+  border: 2px solid #1e1e32;
+  padding: 14px 18px;
+  transition: border-color 0.2s;
+}
+
+.cli-item:hover { border-color: var(--neon-cyan); }
+
+.cli-cmd {
+  font-family: var(--font-terminal);
+  font-size: 22px;
+  color: var(--neon-green);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cli-cmd .cmd-prefix { color: var(--neon-cyan); }
+
+.cli-desc {
+  color: var(--text-dim);
+  font-size: 17px;
+}
+
+/* ═══════════════════════════════════════════
+   PLATFORMS
+   ═══════════════════════════════════════════ */
+#platforms {
+  padding: 60px 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.platform-badges {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-top: 30px;
+  text-align: center;
+}
+
+.platform-badge {
+  background: var(--bg-panel);
+  border: 2px solid #2a2a40;
+  padding: 18px 28px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: border-color 0.2s;
+}
+
+.platform-badge:hover { border-color: var(--neon-cyan); }
+
+.platform-badge .plat-icon { font-size: 30px; }
+
+.platform-badge .plat-name {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--neon-cyan);
+}
+
+.platform-badge .plat-detail {
+  font-size: 16px;
+  color: var(--text-dim);
+}
+
+/* ═══════════════════════════════════════════
+   CTA
+   ═══════════════════════════════════════════ */
+#cta {
+  padding: 80px 24px;
+  text-align: center;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.cta-box {
+  background: var(--bg-panel);
+  padding: 50px 40px;
+  position: relative;
+  overflow: hidden;
+}
+
+.cta-box::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border: 2px dashed rgba(57, 255, 20, 0.2);
+  pointer-events: none;
+}
+
+.cta-box h2 {
+  font-family: var(--font-pixel);
+  font-size: clamp(12px, 2.5vw, 20px);
+  color: var(--neon-green);
+  text-shadow: 0 0 10px rgba(57, 255, 20, 0.4);
+  margin-bottom: 16px;
+}
+
+.cta-box p {
+  color: var(--text-dim);
+  font-size: 22px;
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+
+.cta-box .hero-actions { justify-content: center; }
+
+/* ═══════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════ */
+footer {
+  border-top: 3px solid #1e1e32;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+footer .footer-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+footer .footer-left {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--text-dim);
+}
+
+footer .footer-left span { color: var(--neon-green); }
+
+footer .footer-links {
+  display: flex;
+  gap: 20px;
+}
+
+footer .footer-links a {
+  font-family: var(--font-terminal);
+  font-size: 20px;
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+footer .footer-links a:hover { color: var(--neon-green); }
+
+/* ═══════════════════════════════════════════
+   SCROLL REVEAL
+   ═══════════════════════════════════════════ */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ═══════════════════════════════════════════
+   TYPED CURSOR
+   ═══════════════════════════════════════════ */
+.typed-cursor {
+  display: inline-block;
+  width: 10px;
+  height: 1em;
+  background: var(--neon-green);
+  margin-left: 4px;
+  animation: blink 1s step-end infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════ */
+@media (max-width: 700px) {
+  .arch-flow { flex-direction: column; }
+  .arch-arrow { transform: rotate(90deg); }
+  .arch-node.custosa-node { transform: scale(1); }
+  section { padding: 50px 16px; }
+  .features-grid { grid-template-columns: 1fr; }
+  .detection-grid { grid-template-columns: 1fr; }
+  .cli-grid { grid-template-columns: 1fr; }
+  .tab-btn { font-size: 7px; padding: 10px 12px; }
+  .meter-segment { font-size: 6px; }
+  footer .footer-inner { justify-content: center; text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ STARFIELD ══════════ -->
+<div id="starfield"></div>
+
+<!-- ══════════ NAVBAR ══════════ -->
+<nav>
+  <div class="nav-inner">
+    <a href="#hero" class="logo">CUSTOSA<span>X</span>OPENCLAW</a>
+    <button class="mobile-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Menu">MENU</button>
+    <ul class="nav-links">
+      <li><a href="#architecture">How It Works</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#detection">Detection</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#cli">CLI</a></li>
+      <li><a href="https://github.com/uditanshutomar/CustosaXopenclaw" target="_blank">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ══════════ HERO ══════════ -->
+<section id="hero">
+  <div class="hero-shield">
+    <svg viewBox="0 0 64 76" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Pixel shield -->
+      <rect x="24" y="0" width="16" height="4" fill="#39ff14"/>
+      <rect x="16" y="4" width="8" height="4" fill="#39ff14"/>
+      <rect x="40" y="4" width="8" height="4" fill="#39ff14"/>
+      <rect x="12" y="8" width="4" height="4" fill="#39ff14"/>
+      <rect x="48" y="8" width="4" height="4" fill="#39ff14"/>
+      <rect x="8" y="12" width="4" height="4" fill="#39ff14"/>
+      <rect x="52" y="12" width="4" height="4" fill="#39ff14"/>
+      <rect x="8" y="16" width="4" height="28" fill="#39ff14"/>
+      <rect x="52" y="16" width="4" height="28" fill="#39ff14"/>
+      <rect x="12" y="44" width="4" height="8" fill="#39ff14"/>
+      <rect x="48" y="44" width="4" height="8" fill="#39ff14"/>
+      <rect x="16" y="52" width="4" height="8" fill="#39ff14"/>
+      <rect x="44" y="52" width="4" height="8" fill="#39ff14"/>
+      <rect x="20" y="60" width="4" height="4" fill="#39ff14"/>
+      <rect x="40" y="60" width="4" height="4" fill="#39ff14"/>
+      <rect x="24" y="64" width="4" height="4" fill="#39ff14"/>
+      <rect x="36" y="64" width="4" height="4" fill="#39ff14"/>
+      <rect x="28" y="68" width="8" height="4" fill="#39ff14"/>
+      <!-- Inner fill -->
+      <rect x="12" y="12" width="40" height="32" fill="#0a1a0a" opacity="0.8"/>
+      <rect x="16" y="44" width="32" height="8" fill="#0a1a0a" opacity="0.8"/>
+      <rect x="20" y="52" width="24" height="8" fill="#0a1a0a" opacity="0.8"/>
+      <rect x="24" y="60" width="16" height="4" fill="#0a1a0a" opacity="0.8"/>
+      <rect x="28" y="64" width="8" height="4" fill="#0a1a0a" opacity="0.8"/>
+      <!-- Lock icon inside shield -->
+      <rect x="26" y="22" width="12" height="4" fill="#39ff14" opacity="0.8"/>
+      <rect x="24" y="26" width="4" height="4" fill="#39ff14" opacity="0.8"/>
+      <rect x="36" y="26" width="4" height="4" fill="#39ff14" opacity="0.8"/>
+      <rect x="22" y="30" width="20" height="16" fill="#39ff14" opacity="0.8"/>
+      <rect x="30" y="34" width="4" height="4" fill="#0a1a0a"/>
+      <rect x="30" y="38" width="4" height="4" fill="#0a1a0a"/>
+    </svg>
+  </div>
+
+  <h1 class="hero-title">CUSTOSA<span class="x-mark">X</span>OPENCLAW</h1>
+  <p class="hero-subtitle">PROMPT INJECTION PROTECTION SYSTEM</p>
+  <p class="hero-tagline">Your AI gateway's <em>last line of defense</em> against prompt injection attacks.</p>
+  <p class="hero-version">VERSION <span>1.2.7</span> // macOS + Linux // Python 3.10+</p>
+
+  <div class="hero-actions">
+    <a href="#install" class="btn-pixel btn-primary">GET STARTED</a>
+    <a href="https://github.com/uditanshutomar/CustosaXopenclaw" target="_blank" class="btn-pixel btn-secondary">VIEW SOURCE</a>
+  </div>
+
+  <div class="scroll-hint">SCROLL DOWN</div>
+</section>
+
+<!-- ══════════ ARCHITECTURE ══════════ -->
+<section id="architecture" class="reveal">
+  <h2 class="section-title" style="color:var(--neon-cyan)">HOW IT WORKS</h2>
+
+  <div class="arch-flow">
+    <div class="arch-node pixel-border-cyan client-node">
+      <span class="node-icon">&#x1F5A5;</span>
+      <span class="node-label">AI CLIENT</span>
+    </div>
+    <span class="arch-arrow">&#9654;&#9654;&#9654;</span>
+    <div class="arch-node custosa-node">
+      <span class="node-icon">&#x1F6E1;</span>
+      <span class="node-label">CUSTOSA PROXY</span>
+    </div>
+    <span class="arch-arrow">&#9654;&#9654;&#9654;</span>
+    <div class="arch-node pixel-border-magenta gateway-node">
+      <span class="node-icon">&#x2699;</span>
+      <span class="node-label">OPENCLAW GATEWAY</span>
+    </div>
+  </div>
+
+  <p class="arch-desc">
+    Custosa sits as a <strong>transparent WebSocket proxy</strong> between your clients and the AI gateway. Every message is analyzed in real-time. Safe traffic flows through. Threats get blocked or held for human review.
+  </p>
+</section>
+
+<!-- ══════════ CONFIDENCE METER ══════════ -->
+<section id="confidence" class="reveal">
+  <h2 class="section-title" style="color:var(--neon-yellow)">CONFIDENCE SCORING</h2>
+
+  <div class="meter-container pixel-border" style="border-color:var(--neon-yellow); box-shadow: var(--pixel-border) var(--pixel-border) 0 0 rgba(0,0,0,0.4), 0 0 20px rgba(255,230,0,0.1);">
+    <div class="meter-bar">
+      <div class="meter-segment meter-seg-allow">ALLOW</div>
+      <div class="meter-segment meter-seg-log">ALLOW+LOG</div>
+      <div class="meter-segment meter-seg-hold">HOLD</div>
+      <div class="meter-segment meter-seg-block">BLOCK</div>
+    </div>
+    <div class="meter-labels">
+      <span>0.0 (SAFE)</span>
+      <span>0.3</span>
+      <span>0.7</span>
+      <span>0.9</span>
+      <span>1.0 (THREAT)</span>
+    </div>
+    <div class="meter-legend">
+      <div class="legend-item">
+        <div class="legend-dot green"></div>
+        <div>
+          <strong style="color:var(--neon-green)">&lt; 0.3 ALLOW</strong>
+          <span>Safe traffic, forwarded immediately</span>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot yellow"></div>
+        <div>
+          <strong style="color:var(--neon-yellow)">0.3 - 0.7 LOG</strong>
+          <span>Forwarded, but logged for audit</span>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot orange"></div>
+        <div>
+          <strong style="color:var(--neon-orange)">0.7 - 0.9 HOLD</strong>
+          <span>Held for Telegram approval (5m timeout)</span>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot red"></div>
+        <div>
+          <strong style="color:var(--neon-red)">&ge; 0.9 BLOCK</strong>
+          <span>Definite attack, auto-rejected</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ FEATURES ══════════ -->
+<section id="features" class="reveal">
+  <h2 class="section-title" style="color:var(--neon-green)">FEATURES</h2>
+
+  <div class="features-grid">
+    <div class="feature-card pixel-border">
+      <span class="feature-icon">&#x1F50D;</span>
+      <h3>MULTI-LAYER DETECTION</h3>
+      <p>Three-layer analysis pipeline: regex pattern matching against 50+ injection signatures, heuristic structural analysis, and optional ML classifier.</p>
+    </div>
+    <div class="feature-card pixel-border-cyan">
+      <span class="feature-icon">&#x1F4F2;</span>
+      <h3>TELEGRAM APPROVAL</h3>
+      <p>Human-in-the-loop for edge cases. Uncertain messages get sent to your Telegram bot with [ALLOW] and [DENY] buttons. 5-minute timeout, auto-deny.</p>
+    </div>
+    <div class="feature-card pixel-border-magenta">
+      <span class="feature-icon">&#x26A0;</span>
+      <h3>TOOL RISK CLASSIFICATION</h3>
+      <p>Automatically holds critical tool invocations like exec, shell, bash. High-risk tools (browser, web_fetch) also require approval.</p>
+    </div>
+    <div class="feature-card pixel-border" style="border-color:var(--neon-yellow); box-shadow: var(--pixel-border) var(--pixel-border) 0 0 rgba(0,0,0,0.4), 0 0 20px rgba(255,230,0,0.15);">
+      <span class="feature-icon">&#x1F520;</span>
+      <h3>UNICODE NORMALIZATION</h3>
+      <p>Prevents homoglyph bypass attacks using Cyrillic/Greek lookalike characters, zero-width characters, and other Unicode tricks.</p>
+    </div>
+    <div class="feature-card pixel-border" style="border-color:var(--neon-orange); box-shadow: var(--pixel-border) var(--pixel-border) 0 0 rgba(0,0,0,0.4), 0 0 20px rgba(255,106,0,0.15);">
+      <span class="feature-icon">&#x1F9E0;</span>
+      <h3>SESSION-AWARE CONTEXT</h3>
+      <p>Detects multi-message attack patterns by maintaining session context. Catches distributed injection attempts across conversation turns.</p>
+    </div>
+    <div class="feature-card pixel-border" style="border-color:var(--neon-red); box-shadow: var(--pixel-border) var(--pixel-border) 0 0 rgba(0,0,0,0.4), 0 0 20px rgba(255,23,68,0.15);">
+      <span class="feature-icon">&#x1F6AB;</span>
+      <h3>ROLE ESCALATION GUARD</h3>
+      <p>Blocks client-injected system/admin roles and detects instruction laundering through tool outputs. Based on OWASP LLM Top 10.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ DETECTION PATTERNS ══════════ -->
+<section id="detection" class="reveal">
+  <h2 class="section-title" style="color:var(--neon-magenta)">DETECTION PATTERNS</h2>
+
+  <div class="detection-grid">
+    <div class="detect-item">
+      <div class="detect-num">01</div>
+      <div>
+        <h4>INSTRUCTION OVERRIDE</h4>
+        <p>"Ignore previous instructions", system prompt overrides</p>
+      </div>
+    </div>
+    <div class="detect-item">
+      <div class="detect-num">02</div>
+      <div>
+        <h4>PERSONA MANIPULATION</h4>
+        <p>"You are now evil", DAN mode, jailbreak personas</p>
+      </div>
+    </div>
+    <div class="detect-item">
+      <div class="detect-num">03</div>
+      <div>
+        <h4>PROMPT EXTRACTION</h4>
+        <p>"Reveal your system prompt", configuration leaks</p>
+      </div>
+    </div>
+    <div class="detect-item">
+      <div class="detect-num">04</div>
+      <div>
+        <h4>CONTEXT MANIPULATION</h4>
+        <p>Injected [system], &lt;admin&gt; markers, code block escapes</p>
+      </div>
+    </div>
+    <div class="detect-item">
+      <div class="detect-num">05</div>
+      <div>
+        <h4>ENCODING EVASION</h4>
+        <p>Base64, Unicode tricks, typoglycemia, ROT13</p>
+      </div>
+    </div>
+    <div class="detect-item">
+      <div class="detect-num">06</div>
+      <div>
+        <h4>DATA EXFILTRATION</h4>
+        <p>Hidden image tags, external requests, data smuggling</p>
+      </div>
+    </div>
+    <div class="detect-item">
+      <div class="detect-num">07</div>
+      <div>
+        <h4>TOOL INJECTION</h4>
+        <p>Dangerous tool invocations, shell commands, exec calls</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ INSTALL ══════════ -->
+<section id="install" class="reveal">
+  <h2 class="section-title" style="color:var(--neon-yellow)">INSTALLATION</h2>
+
+  <div class="install-tabs">
+    <button class="tab-btn active" data-tab="oneliner">ONE-LINER</button>
+    <button class="tab-btn" data-tab="homebrew">HOMEBREW</button>
+    <button class="tab-btn" data-tab="source">FROM SOURCE</button>
+  </div>
+
+  <div class="tab-content">
+    <div class="tab-panel active" id="tab-oneliner">
+      <h4>RECOMMENDED &mdash; SINGLE COMMAND INSTALL</h4>
+      <div class="code-block">
+        <button class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/uditanshutomar/CustosaXopenclaw/main/install.sh | bash">COPY</button>
+        <code><span class="prompt">$</span> curl <span class="flag">-fsSL</span> https://raw.githubusercontent.com/uditanshutomar/CustosaXopenclaw/main/install.sh | bash</code>
+      </div>
+      <p>Automatically installs Custosa, runs the setup wizard, configures your Telegram bot, and opens the dashboard.</p>
+    </div>
+
+    <div class="tab-panel" id="tab-homebrew">
+      <h4>INSTALL VIA HOMEBREW (macOS / Linux)</h4>
+      <div class="code-block">
+        <button class="copy-btn" data-copy="brew tap uditanshutomar/custosaxopenclaw
+brew install custosa
+custosa install">COPY</button>
+        <code><span class="prompt">$</span> brew tap uditanshutomar/custosaxopenclaw
+<span class="prompt">$</span> brew install custosa
+<span class="prompt">$</span> custosa install</code>
+      </div>
+      <p>Uses the official Homebrew tap. The <code>custosa install</code> command launches the setup wizard.</p>
+    </div>
+
+    <div class="tab-panel" id="tab-source">
+      <h4>BUILD FROM SOURCE</h4>
+      <div class="code-block">
+        <button class="copy-btn" data-copy="git clone https://github.com/uditanshutomar/CustosaXopenclaw.git
+cd CustosaXopenclaw
+pip install -e .
+custosa install">COPY</button>
+        <code><span class="prompt">$</span> git clone https://github.com/uditanshutomar/CustosaXopenclaw.git
+<span class="prompt">$</span> cd CustosaXopenclaw
+<span class="prompt">$</span> pip install <span class="flag">-e</span> .
+<span class="prompt">$</span> custosa install</code>
+      </div>
+      <p>Clone the repo, install in editable mode, then run the setup wizard. Requires Python 3.10+.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ CLI COMMANDS ══════════ -->
+<section id="cli" class="reveal">
+  <h2 class="section-title" style="color:var(--neon-cyan)">CLI COMMANDS</h2>
+
+  <div class="cli-grid">
+    <div class="cli-item">
+      <span class="cli-cmd"><span class="cmd-prefix">$</span> custosa install</span>
+      <span class="cli-desc">Run setup wizard</span>
+    </div>
+    <div class="cli-item">
+      <span class="cli-cmd"><span class="cmd-prefix">$</span> custosa serve</span>
+      <span class="cli-desc">Start proxy server</span>
+    </div>
+    <div class="cli-item">
+      <span class="cli-cmd"><span class="cmd-prefix">$</span> custosa status</span>
+      <span class="cli-desc">Show protection status</span>
+    </div>
+    <div class="cli-item">
+      <span class="cli-cmd"><span class="cmd-prefix">$</span> custosa start</span>
+      <span class="cli-desc">Start background service</span>
+    </div>
+    <div class="cli-item">
+      <span class="cli-cmd"><span class="cmd-prefix">$</span> custosa stop</span>
+      <span class="cli-desc">Stop background service</span>
+    </div>
+    <div class="cli-item">
+      <span class="cli-cmd"><span class="cmd-prefix">$</span> custosa logs</span>
+      <span class="cli-desc">View security logs</span>
+    </div>
+    <div class="cli-item">
+      <span class="cli-cmd"><span class="cmd-prefix">$</span> custosa dashboard</span>
+      <span class="cli-desc">Open web dashboard</span>
+    </div>
+    <div class="cli-item">
+      <span class="cli-cmd"><span class="cmd-prefix">$</span> custosa test</span>
+      <span class="cli-desc">Test detection engine</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PLATFORMS ══════════ -->
+<div id="platforms" class="reveal">
+  <h2 class="section-title" style="color:var(--neon-cyan)">PLATFORMS</h2>
+  <div class="platform-badges">
+    <div class="platform-badge">
+      <span class="plat-icon">&#x1F34E;</span>
+      <div>
+        <div class="plat-name">macOS</div>
+        <div class="plat-detail">launchd service</div>
+      </div>
+    </div>
+    <div class="platform-badge">
+      <span class="plat-icon">&#x1F427;</span>
+      <div>
+        <div class="plat-name">LINUX</div>
+        <div class="plat-detail">systemd service</div>
+      </div>
+    </div>
+    <div class="platform-badge">
+      <span class="plat-icon">&#x1F40D;</span>
+      <div>
+        <div class="plat-name">PYTHON 3.10+</div>
+        <div class="plat-detail">3.10 / 3.11 / 3.12</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ CTA ══════════ -->
+<section id="cta" class="reveal">
+  <div class="cta-box pixel-border">
+    <h2>READY TO SHIELD YOUR AI?</h2>
+    <p>Custosa is free for personal use. One command to install. Zero-config protection for your AI gateway.</p>
+    <div class="hero-actions">
+      <a href="#install" class="btn-pixel btn-primary">INSTALL NOW</a>
+      <a href="https://github.com/uditanshutomar/CustosaXopenclaw" target="_blank" class="btn-pixel btn-secondary">GITHUB REPO</a>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ FOOTER ══════════ -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">
+      CUSTOSA<span>X</span>OPENCLAW v1.2.7 // PROMPT INJECTION SHIELD
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/uditanshutomar/CustosaXopenclaw" target="_blank">GitHub</a>
+      <a href="https://github.com/uditanshutomar/CustosaXopenclaw/issues" target="_blank">Issues</a>
+      <a href="https://github.com/uditanshutomar/CustosaXopenclaw#readme" target="_blank">Docs</a>
+    </div>
+  </div>
+</footer>
+
+<!-- ══════════ SCRIPTS ══════════ -->
+<script>
+// ---- Starfield ----
+(function() {
+  const sf = document.getElementById('starfield');
+  const count = 80;
+  for (let i = 0; i < count; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    s.style.left = Math.random() * 100 + '%';
+    s.style.top = Math.random() * 100 + '%';
+    s.style.setProperty('--dur', (2 + Math.random() * 4) + 's');
+    s.style.setProperty('--delay', (Math.random() * 4) + 's');
+    const size = Math.random() > 0.7 ? 3 : 2;
+    s.style.width = size + 'px';
+    s.style.height = size + 'px';
+    sf.appendChild(s);
+  }
+})();
+
+// ---- Tab switching ----
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ---- Copy buttons ----
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+      btn.textContent = 'COPIED!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'COPY';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  });
+});
+
+// ---- Scroll reveal ----
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// ---- Close mobile menu on link click ----
+document.querySelectorAll('.nav-links a').forEach(a => {
+  a.addEventListener('click', () => {
+    document.querySelector('.nav-links').classList.remove('open');
+  });
+});
+</script>
+</body>
+</html>
