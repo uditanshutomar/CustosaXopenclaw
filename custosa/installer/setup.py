@@ -263,21 +263,22 @@ class MoltbotDetector:
         Returns:
             Tuple of (found: bool, message: str)
         """
-        # Check for moltbot or clawdbot CLI
+        # Check for moltbot or clawdbot CLI (optional — may be in nvm or non-standard path)
         self.cli_path = self._find_cli()
-        if not self.cli_path:
-            return False, "moltbot/clawdbot CLI not found in PATH"
 
         # Ensure OpenClaw state exists (best effort)
         self._ensure_openclaw_dirs()
 
-        # Ensure config exists (run setup if needed)
+        # Find config file — don't require CLI to be in PATH
         self.config_path = next((p for p in self._config_candidates if p.exists()), None)
         if not self.config_path and self.cli_path:
             self._run_cli("setup")
             self.config_path = next((p for p in self._config_candidates if p.exists()), None)
         if not self.config_path:
-            return False, f"Gateway config not found at {self._config_candidates[0]} or {self._config_candidates[1]}"
+            return False, (
+                "OpenClaw/Moltbot config not found. Checked:\n"
+                + "\n".join(f"  - {p}" for p in self._config_candidates)
+            )
         
         # Try to read config
         try:
