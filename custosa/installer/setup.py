@@ -351,6 +351,9 @@ class MoltbotDetector:
             if self.cli_path:
                 self._run_cli("doctor", "--fix")
             
+            # Also patch the LaunchAgent plist if it has the port hardcoded
+            self._patch_gateway_plist(upstream_port)
+
             logger.info(f"Configured Moltbot: gateway port {self.original_port} -> {upstream_port}")
             logger.info(f"Clients should connect to Custosa on port {custosa_port}")
 
@@ -360,6 +363,45 @@ class MoltbotDetector:
             logger.error(f"Failed to configure gateway: {e}")
             return False
     
+    def _patch_gateway_plist(self, upstream_port: int) -> None:
+        """
+        Patch the OpenClaw gateway LaunchAgent plist to use the upstream port.
+
+        The plist has --port and OPENCLAW_GATEWAY_PORT hardcoded, so changing
+        the JSON config alone doesn't move the gateway.
+        """
+        plist_path = OPENCLAW_GATEWAY_PLIST
+        if not plist_path.exists():
+            logger.debug("OpenClaw gateway plist not found; skipping plist patch")
+            return
+
+        try:
+            content = plist_path.read_text()
+            original = content
+
+            # Replace --port argument value: the <string>PORT</string> after <string>--port</string>
+            import re
+            content = re.sub(
+                r"(<string>--port</string>\s*<string>)\d+(</string>)",
+                rf"\g<1>{upstream_port}\g<2>",
+                content,
+            )
+
+            # Replace OPENCLAW_GATEWAY_PORT env var value
+            content = re.sub(
+                r"(<key>OPENCLAW_GATEWAY_PORT</key>\s*<string>)\d+(</string>)",
+                rf"\g<1>{upstream_port}\g<2>",
+                content,
+            )
+
+            if content != original:
+                plist_path.write_text(content)
+                logger.info(f"Patched OpenClaw gateway plist: port -> {upstream_port}")
+            else:
+                logger.debug("OpenClaw gateway plist already has correct port")
+        except Exception as exc:
+            logger.warning(f"Failed to patch OpenClaw gateway plist: {exc}")
+
     def restore_original(self) -> bool:
         """Restore original Moltbot configuration"""
         if not self.config_path:
