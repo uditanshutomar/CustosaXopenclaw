@@ -1,11 +1,38 @@
-# Custosa v1.2
+# Custosa for OpenClaw
 
 **Prompt Injection Protection for OpenClaw/Moltbot**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 
-Custosa is a transparent WebSocket proxy that intercepts all traffic to Moltbot Gateway and protects against prompt injection attacks. It provides real-time detection with configurable human-in-the-loop approval via Telegram for uncertain cases.
+Custosa adds runtime security controls to OpenClaw/Moltbot through a WebSocket and HTTP proxy plus gateway hooks. It checks prompts, tool calls, and tool outputs, applies configurable policies, and routes uncertain requests to Telegram for human approval.
+
+## Start here
+
+- [Proxy and policy enforcement](custosa/core/proxy.py): traffic handling, tool policies, and approval decisions
+- [Detection engine](custosa/detection/engine.py): pattern matching, heuristics, Unicode normalization, and provenance-aware checks
+- [OpenClaw integration](custosa/openclaw_plugin/index.js): prompt, tool-call, and tool-output hooks
+- [CLI](custosa/main.py): installation, service management, and a local detection demo
+
+The current detector uses rules, heuristics, and optional keyword grouping. A trained ML classifier remains planned. These controls reduce selected risks; they do not establish complete prompt-injection prevention. See [coverage and limitations](#known-limitations) before deployment.
+
+**Related launched product:** [Custosa Tools](https://custosa.com/tools.html) is a separate remote MCP server for schema-level PHI classification, HIPAA-readiness analysis, and migration guidance. This repository contains the OpenClaw integration, not the MCP server implementation.
+
+### Try the detection demo
+
+Python 3.10 or newer is required. This demo runs eight built-in examples without installing a background service or connecting to Telegram.
+
+```bash
+git clone https://github.com/uditanshutomar/CustosaXopenclaw.git
+cd CustosaXopenclaw
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+custosa -v test
+```
+
+The output shows each decision and matched patterns. With the default thresholds, the code-fenced system-override example currently prints a mismatch because it is allowed. The demo reports results but does not return a failing exit status for mismatches. This is a small diagnostic demo, not a measured detection-accuracy benchmark.
+
 
 ---
 
@@ -19,9 +46,9 @@ Custosa is a transparent WebSocket proxy that intercepts all traffic to Moltbot 
                                │
                     ┌──────────▼──────────┐
                     │  Detection Engine   │
-                    │  ├─ Pattern Match   │ (< 1ms)
-                    │  ├─ Heuristics      │ (< 5ms)
-                    │  └─ ML Classifier   │ (< 30ms, optional)
+                    │  ├─ Pattern Match   │
+                    │  ├─ Heuristics      │
+                    │  └─ Keyword Groups  │ (optional)
                     └──────────┬──────────┘
                                │
                     ┌──────────▼──────────┐
@@ -111,15 +138,15 @@ The installer will:
 
 ### Multi-Layer Detection
 
-| Layer | Latency | Method |
-|-------|---------|--------|
-| Pattern Matching | < 1ms | Regex against 50+ known injection signatures |
-| Heuristic Analysis | < 5ms | Structural anomaly detection |
-| Keyword Grouping | < 30ms | Semantic keyword clusters (ML planned) |
+| Layer | Method |
+| --- | --- |
+| Pattern Matching | Regex against known injection signatures |
+| Heuristic Analysis | Structural anomaly detection |
+| Keyword Grouping | Optional keyword clusters; trained ML classifier planned |
 
 ### Unicode Normalization
 
-Custosa prevents homoglyph bypass attacks by normalizing text before analysis:
+Custosa normalizes text before analysis to address selected homoglyph and obfuscation patterns:
 - **Cyrillic/Greek lookalikes**: `а` (Cyrillic) → `a` (Latin)
 - **Zero-width characters**: Invisible chars removed
 - **NFKC normalization**: Fullwidth and math symbols normalized
@@ -297,15 +324,14 @@ pip install -e ".[dev]"
 ### Testing
 
 ```bash
-# Run tests
-pytest
+# Run the built-in detection examples
+custosa -v test
 
-# Test detection engine
-custosa test -v
-
-# Run with mock Telegram
-custosa serve --mock-telegram
+# Inspect supported server options
+custosa serve --help
 ```
+
+The repository currently provides the CLI detection demo but does not contain a standalone `tests/` suite. The demo does not validate proxy integration or detection accuracy.
 
 ### Project Structure
 
@@ -404,7 +430,7 @@ custosa serve --mock-telegram
 
 ## Known Limitations
 
-Current version (v1.2.3) has the following limitations:
+The current integration has the following documented limitations:
 
 | Limitation | Impact | Planned Fix |
 |------------|--------|-------------|
